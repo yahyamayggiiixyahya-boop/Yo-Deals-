@@ -3322,58 +3322,6 @@ function() end)
 
 makeSecHeader("mechanics y movement", "Game Mechanics")
 
-if not KB.InstaReset then KB.InstaReset = {kb=nil, gp=nil} end
-
-local cInsta = baseCard("mechanics y movement", 48)
-cInsta.LayoutOrder = lo("mechanics y movement")
-cLabel(cInsta, "Insta Reset", 10, 120, 11, LABEL_TEXT, Enum.Font.GothamBold)
-local slInsta = cLabel(cInsta, "Reset InstantÃ¡neo", 10, 150, 9, LABEL_SUB, Enum.Font.Gotham)
-slInsta.Size = UDim2.new(0, 150, 0, 13); slInsta.Position = UDim2.new(0, 10, 0, 24)
-
-local plusBtn = Instance.new("TextButton", cInsta)
-plusBtn.Size = UDim2.new(0, 20, 0, 20)
-plusBtn.Position = UDim2.new(1, -(44+10+36+8+20+4), 0.5, -10)
-plusBtn.BackgroundColor3 = KB_BG
-plusBtn.BorderSizePixel = 0
-plusBtn.Text = "+"
-plusBtn.TextColor3 = WHITE -- Rojo
-plusBtn.Font = Enum.Font.GothamBold
-plusBtn.TextSize = 14
-plusBtn.ZIndex = 11
-Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 10)
-local pbs = Instance.new("UIStroke", plusBtn); pbs.Color = BORDER; pbs.Thickness = 1
-plusBtn.MouseButton1Click:Connect(function()
-	TweenService:Create(plusBtn, TweenInfo.new(0.1), {BackgroundColor3=CARD_HOV}):Play()
-	task.delay(0.1, function() TweenService:Create(plusBtn, TweenInfo.new(0.1), {BackgroundColor3=KB_BG}):Play() end)
-
-	if btnInstaReset then
-		btnInstaReset.Visible = not btnInstaReset.Visible
-		if State.requestConfigSave then State.requestConfigSave() end
-	end
-end)
-
-local kbInsta = makeKB(cInsta, KB.InstaReset, function() end)
-kbInsta.Position = UDim2.new(1, -(44+10+36+8), 0.5, -10)
-kbInsta.ZIndex = 11
-
-local setInstaToggleVisual
-setInstaToggleVisual = makePillToggle(cInsta, false, function(on)
-	State.instaResetEnabled = on
-	if on then
-		if btnInstaReset then
-			TweenService:Create(btnInstaReset, TweenInfo.new(0.08), {BackgroundColor3=WHITE, TextColor3=BG}):Play()
-			task.delay(0.22, function()
-				TweenService:Create(btnInstaReset, TweenInfo.new(0.15), {BackgroundColor3=BG, TextColor3=WHITE}):Play()
-			end)
-		end
-
-		task.spawn(cursedInstaReset)
-
-		task.wait(0.2)
-		if setInstaToggleVisual then setInstaToggleVisual(false) end
-	end
-end)
-
 setInfJump       = rowToggle("mechanics y movement", "Infinite Jump",  nil, false, function(on) State.infJumpEnabled = on end)
 setSuperJump     = rowToggle("mechanics y movement", "Infinite Jump Hold",     nil, false, function(on) State.superJumpEnabled = on end)
 setLinieVisual   = rowToggle("mechanics y movement", "Linia ESP", nil, false, function(on) State.linieEnabled = on end)
@@ -4498,30 +4446,59 @@ do
 	end
 	mobileBatV2SetActive = function(on) autoBatV2SetVisual(on) end
 
+
+	-- Aimbot mobile button (visual/input only; uses the existing BAT V2 logic)
 	btnInstaReset = Instance.new("TextButton")
-	btnInstaReset.Name = "Btn_InstaReset"
+	btnInstaReset.Name = "Btn_Aimbot"
 	btnInstaReset.Size = UDim2.new(0, BTN_SIZE, 0, BTN_SIZE)
 	btnInstaReset.Position = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING + BTN_SIZE + BTN_GAP)
-	btnInstaReset.BackgroundColor3 = Q_OFF
-	btnInstaReset.Text = "INSTA\nRESET"
-	btnInstaReset.TextColor3 = Q_TEXT_OFF
-	btnInstaReset.TextScaled = false; btnInstaReset.TextSize = 11
+	btnInstaReset.BackgroundColor3 = Color3.fromRGB(2, 2, 10)
+	btnInstaReset.Text = "AIMBOT"
+	btnInstaReset.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnInstaReset.TextScaled = false
+	btnInstaReset.TextSize = 10
 	btnInstaReset.Font = Enum.Font.GothamBold
-	btnInstaReset.TextWrapped = true; btnInstaReset.LineHeight = 1.2
-	btnInstaReset.BorderSizePixel = 0; btnInstaReset.AutoButtonColor = false
+	btnInstaReset.TextWrapped = true
+	btnInstaReset.BorderSizePixel = 0
+	btnInstaReset.AutoButtonColor = false
 	btnInstaReset.ZIndex = 100
+	btnInstaReset.ClipsDescendants = true
 	btnInstaReset.Parent = gui
-	State._registerPurpleAnimatedButton(btnInstaReset)
-	attachRedTextShine(btnInstaReset)
+
+	local aimbotImage = Instance.new("ImageLabel")
+	aimbotImage.Name = "BatAimbotImage"
+	aimbotImage.BackgroundTransparency = 1
+	aimbotImage.Image = "rbxassetid://88369503310562"
+	aimbotImage.ImageRectSize = Vector2.new(128, 96)
+	aimbotImage.ImageRectOffset = Vector2.new(128, 288)
+	aimbotImage.ScaleType = Enum.ScaleType.Stretch
+	aimbotImage.Size = UDim2.fromScale(1, 1)
+	aimbotImage.ZIndex = 101
+	aimbotImage.Parent = btnInstaReset
+
+	local aimbotOverlay = Instance.new("TextLabel")
+	aimbotOverlay.Name = "AimbotLabel"
+	aimbotOverlay.BackgroundTransparency = 1
+	aimbotOverlay.Size = UDim2.new(1, -8, 1, 0)
+	aimbotOverlay.Position = UDim2.new(0, 4, 0, 0)
+	aimbotOverlay.Text = "AIMBOT"
+	aimbotOverlay.TextColor3 = Color3.fromRGB(255, 255, 255)
+	aimbotOverlay.TextSize = 10
+	aimbotOverlay.Font = Enum.Font.GothamBold
+	aimbotOverlay.TextWrapped = true
+	aimbotOverlay.TextXAlignment = Enum.TextXAlignment.Center
+	aimbotOverlay.TextYAlignment = Enum.TextYAlignment.Center
+	aimbotOverlay.ZIndex = 102
+	aimbotOverlay.Parent = btnInstaReset
+
+	local aimbotStroke = Instance.new("UIStroke")
+	aimbotStroke.Name = "AimbotOuterStroke"
+	aimbotStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	aimbotStroke.Color = Color3.fromRGB(0, 0, 0)
+	aimbotStroke.Thickness = 1.1
+	aimbotStroke.Transparency = 0.15
+	aimbotStroke.Parent = btnInstaReset
 	Instance.new("UICorner", btnInstaReset).Name = "ButtonShapeCorner"
-	local instaResetStroke = Instance.new("UIStroke")
-	instaResetStroke.Name = "RedOuterStroke"
-	instaResetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	instaResetStroke.Color = Color3.fromRGB(0, 0, 0)
-	instaResetStroke.Thickness = 1.1
-	instaResetStroke.Transparency = 0.15
-	instaResetStroke.LineJoinMode = Enum.LineJoinMode.Round
-	instaResetStroke.Parent = btnInstaReset
 	applyMobileButtonsSize(State.buttonsSizeValue)
 
 	makeDraggable(btnInstaReset)
@@ -4532,21 +4509,19 @@ do
 	end)
 
 	btnInstaReset.Activated:Connect(function()
-		btnInstaReset:SetAttribute("PurpleFlash", true)
-		task.delay(0.55, function()
-			if btnInstaReset and btnInstaReset.Parent then
-				btnInstaReset:SetAttribute("PurpleFlash", false)
-			end
-		end)
-
-		if setInstaToggleVisual then
-			setInstaToggleVisual(true)
-			task.delay(0.2, function() setInstaToggleVisual(false) end)
-		end
-
-		task.spawn(cursedInstaReset)
+		if btnBatV2 then btnBatV2:Activate() end
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
+
+	btnInstaReset:SetAttribute("PurpleActive", btnBatV2 and btnBatV2:GetAttribute("PurpleActive") == true or false)
+	btnBatV2:GetAttributeChangedSignal("PurpleActive"):Connect(function()
+		btnInstaReset:SetAttribute("PurpleActive", btnBatV2:GetAttribute("PurpleActive") == true)
+		aimbotImage.ImageColor3 = btnBatV2:GetAttribute("PurpleActive") == true and Color3.fromRGB(255, 120, 255) or Color3.fromRGB(255, 255, 255)
+	end)
+	if btnBatV2:GetAttribute("PurpleActive") == true then
+		aimbotImage.ImageColor3 = Color3.fromRGB(255, 120, 255)
+	end
+
 
 	resetMobileButtons = function()
 		for name, btn in pairs(mobileButtonsByName) do
@@ -7181,16 +7156,6 @@ UIS.InputBegan:Connect(function(inp,gp)
     elseif kbMatch(KB.TPBat,kc) then
         State._setTPBatEnabled(not State.tpBatEnabled)
         if State._tpBatSetVisual then State._tpBatSetVisual(State.tpBatEnabled) end
-    elseif kbMatch(KB.InstaReset,kc) then
-        task.spawn(cursedInstaReset)
-        if btnInstaReset and btnInstaReset.Parent then
-            btnInstaReset:SetAttribute("PurpleFlash", true)
-            task.delay(0.55, function() if btnInstaReset and btnInstaReset.Parent then btnInstaReset:SetAttribute("PurpleFlash", false) end end)
-        end
-        if setInstaToggleVisual then
-            setInstaToggleVisual(true)
-            task.delay(0.2, function() if setInstaToggleVisual then setInstaToggleVisual(false) end end)
-        end
     elseif kbMatch(KB.GuiHide,kc) then
         State.guiVisible=not State.guiVisible
         pcall(function() main.Visible=State.guiVisible end)
