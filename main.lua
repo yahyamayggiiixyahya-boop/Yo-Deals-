@@ -891,6 +891,7 @@ local KB = {
 	Speed     = {kb = Enum.KeyCode.Q,           gp = nil},
 	Lagger    = {kb = Enum.KeyCode.R,           gp = nil},
 	Lagger2   = {kb = nil,                      gp = nil},
+	InstaReset= {kb = nil,                      gp = nil},
 	GuiHide   = {kb = Enum.KeyCode.LeftControl, gp = nil},
 }
 
@@ -3321,6 +3322,58 @@ function() end)
 
 makeSecHeader("mechanics y movement", "Game Mechanics")
 
+if not KB.InstaReset then KB.InstaReset = {kb=nil, gp=nil} end
+
+local cInsta = baseCard("mechanics y movement", 48)
+cInsta.LayoutOrder = lo("mechanics y movement")
+cLabel(cInsta, "Insta Reset", 10, 120, 11, LABEL_TEXT, Enum.Font.GothamBold)
+local slInsta = cLabel(cInsta, "Reset InstantÃ¡neo", 10, 150, 9, LABEL_SUB, Enum.Font.Gotham)
+slInsta.Size = UDim2.new(0, 150, 0, 13); slInsta.Position = UDim2.new(0, 10, 0, 24)
+
+local plusBtn = Instance.new("TextButton", cInsta)
+plusBtn.Size = UDim2.new(0, 20, 0, 20)
+plusBtn.Position = UDim2.new(1, -(44+10+36+8+20+4), 0.5, -10)
+plusBtn.BackgroundColor3 = KB_BG
+plusBtn.BorderSizePixel = 0
+plusBtn.Text = "+"
+plusBtn.TextColor3 = WHITE -- Rojo
+plusBtn.Font = Enum.Font.GothamBold
+plusBtn.TextSize = 14
+plusBtn.ZIndex = 11
+Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 10)
+local pbs = Instance.new("UIStroke", plusBtn); pbs.Color = BORDER; pbs.Thickness = 1
+plusBtn.MouseButton1Click:Connect(function()
+	TweenService:Create(plusBtn, TweenInfo.new(0.1), {BackgroundColor3=CARD_HOV}):Play()
+	task.delay(0.1, function() TweenService:Create(plusBtn, TweenInfo.new(0.1), {BackgroundColor3=KB_BG}):Play() end)
+
+	if btnInstaReset then
+		btnInstaReset.Visible = not btnInstaReset.Visible
+		if State.requestConfigSave then State.requestConfigSave() end
+	end
+end)
+
+local kbInsta = makeKB(cInsta, KB.InstaReset, function() end)
+kbInsta.Position = UDim2.new(1, -(44+10+36+8), 0.5, -10)
+kbInsta.ZIndex = 11
+
+local setInstaToggleVisual
+setInstaToggleVisual = makePillToggle(cInsta, false, function(on)
+	State.instaResetEnabled = on
+	if on then
+		if btnInstaReset then
+			TweenService:Create(btnInstaReset, TweenInfo.new(0.08), {BackgroundColor3=WHITE, TextColor3=BG}):Play()
+			task.delay(0.22, function()
+				TweenService:Create(btnInstaReset, TweenInfo.new(0.15), {BackgroundColor3=BG, TextColor3=WHITE}):Play()
+			end)
+		end
+
+		task.spawn(cursedInstaReset)
+
+		task.wait(0.2)
+		if setInstaToggleVisual then setInstaToggleVisual(false) end
+	end
+end)
+
 setInfJump       = rowToggle("mechanics y movement", "Infinite Jump",  nil, false, function(on) State.infJumpEnabled = on end)
 setSuperJump     = rowToggle("mechanics y movement", "Infinite Jump Hold",     nil, false, function(on) State.superJumpEnabled = on end)
 setLinieVisual   = rowToggle("mechanics y movement", "Linia ESP", nil, false, function(on) State.linieEnabled = on end)
@@ -5080,81 +5133,43 @@ startBatAimbotV2 = function()
         end
 
         local target = getClosestPlayerV2()
-        if not target or not target.Character then
+        if target and target.Character then
+            local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                local targetVelocity = targetRoot.AssemblyLinearVelocity
+                local movementDirection = targetVelocity.Magnitude > 0.1
+                    and targetVelocity.Unit
+                    or targetRoot.CFrame.LookVector
+
+                local offset = movementDirection * BAT_V2_FOLLOW_DIST
+                    + Vector3.new(0, BAT_V2_HEIGHT_OFFSET + BAT_V2_VERTICAL_OFFSET, 0)
+                local desiredPosition = targetRoot.Position + offset
+                local directionToTarget = desiredPosition - root.Position
+
+                if directionToTarget.Magnitude > 0.5 then
+                    local movementVector = directionToTarget.Unit * LUST_BYPASS_AIMBOT_SPEED
+                    root.AssemblyLinearVelocity = Vector3.new(
+                        movementVector.X,
+                        movementVector.Y,
+                        movementVector.Z
+                    )
+                else
+                    root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * 0.95
+                    if root.AssemblyLinearVelocity.Magnitude < 1 then
+                        root.AssemblyLinearVelocity = Vector3.zero
+                    end
+                end
+
+                if State.autoSwingEnabled
+                    and (root.Position - targetRoot.Position).Magnitude <= BAT_V2_HIT_DIST then
+                    tryHitBypassBat()
+                end
+            end
+        else
             root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * 0.9
-            root.AssemblyAngularVelocity = Vector3.zero
-            return
-        end
-
-        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
-        if not targetRoot then return end
-
-        local targetVelocity = targetRoot.AssemblyLinearVelocity
-        local targetPos = targetRoot.Position
-
-        -- Small horizontal prediction; vertical tracking follows the target immediately.
-        local horizontalVelocity = Vector3.new(
-            targetVelocity.X,
-            0,
-            targetVelocity.Z
-        )
-        local predictTime = math.clamp(
-            horizontalVelocity.Magnitude / 180,
-            0.03,
-            0.10
-        )
-
-        local predictedXZ = targetPos + horizontalVelocity * predictTime
-        local desiredY =
-            targetPos.Y
-            + BAT_V2_HEIGHT_OFFSET
-            + BAT_V2_VERTICAL_OFFSET
-            + math.clamp(targetVelocity.Y * 0.08, -2, 2)
-
-        local desiredPosition = Vector3.new(
-            predictedXZ.X,
-            desiredY,
-            predictedXZ.Z
-        )
-
-        local toTarget = desiredPosition - root.Position
-        local distance = toTarget.Magnitude
-
-        if distance > 0.15 then
-            local chaseDir = toTarget.Unit
-            local chaseSpeed = math.max(LUST_BYPASS_AIMBOT_SPEED, 60)
-            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(
-                chaseDir * chaseSpeed,
-                0.90
-            )
-        else
-            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(
-                Vector3.zero,
-                0.65
-            )
-        end
-
-        -- Continuously face the target so the bat does not remain beside it at a bad angle.
-        local facePosition = targetPos + Vector3.new(0, 1.2, 0)
-        local faceVector = facePosition - root.Position
-
-        if faceVector.Magnitude > 0.05 then
-            local goalCF = CFrame.lookAt(root.Position, facePosition)
-            local deltaCF = root.CFrame:ToObjectSpace(goalCF)
-            local pitch, yaw, roll = deltaCF:ToOrientation()
-
-            root.AssemblyAngularVelocity = Vector3.new(
-                math.clamp(pitch * 35, -35, 35),
-                math.clamp(yaw * 55, -55, 55),
-                math.clamp(roll * 35, -35, 35)
-            )
-        else
-            root.AssemblyAngularVelocity = Vector3.zero
-        end
-
-        if State.autoSwingEnabled
-            and distance <= BAT_V2_HIT_DIST then
-            tryHitBypassBat()
+            if root.AssemblyLinearVelocity.Magnitude < 1 then
+                root.AssemblyLinearVelocity = Vector3.zero
+            end
         end
     end)
 end
