@@ -891,7 +891,6 @@ local KB = {
 	Speed     = {kb = Enum.KeyCode.Q,           gp = nil},
 	Lagger    = {kb = Enum.KeyCode.R,           gp = nil},
 	Lagger2   = {kb = nil,                      gp = nil},
-	InstaReset= {kb = nil,                      gp = nil},
 	GuiHide   = {kb = Enum.KeyCode.LeftControl, gp = nil},
 }
 
@@ -4446,59 +4445,30 @@ do
 	end
 	mobileBatV2SetActive = function(on) autoBatV2SetVisual(on) end
 
-
-	-- Aimbot mobile button (visual/input only; uses the existing BAT V2 logic)
 	btnInstaReset = Instance.new("TextButton")
-	btnInstaReset.Name = "Btn_Aimbot"
+	btnInstaReset.Name = "Btn_InstaReset"
 	btnInstaReset.Size = UDim2.new(0, BTN_SIZE, 0, BTN_SIZE)
 	btnInstaReset.Position = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING + BTN_SIZE + BTN_GAP)
-	btnInstaReset.BackgroundColor3 = Color3.fromRGB(2, 2, 10)
-	btnInstaReset.Text = "AIMBOT"
-	btnInstaReset.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btnInstaReset.TextScaled = false
-	btnInstaReset.TextSize = 10
+	btnInstaReset.BackgroundColor3 = Q_OFF
+	btnInstaReset.Text = "INSTA\nRESET"
+	btnInstaReset.TextColor3 = Q_TEXT_OFF
+	btnInstaReset.TextScaled = false; btnInstaReset.TextSize = 11
 	btnInstaReset.Font = Enum.Font.GothamBold
-	btnInstaReset.TextWrapped = true
-	btnInstaReset.BorderSizePixel = 0
-	btnInstaReset.AutoButtonColor = false
+	btnInstaReset.TextWrapped = true; btnInstaReset.LineHeight = 1.2
+	btnInstaReset.BorderSizePixel = 0; btnInstaReset.AutoButtonColor = false
 	btnInstaReset.ZIndex = 100
-	btnInstaReset.ClipsDescendants = true
 	btnInstaReset.Parent = gui
-
-	local aimbotImage = Instance.new("ImageLabel")
-	aimbotImage.Name = "BatAimbotImage"
-	aimbotImage.BackgroundTransparency = 1
-	aimbotImage.Image = "rbxassetid://88369503310562"
-	aimbotImage.ImageRectSize = Vector2.new(128, 96)
-	aimbotImage.ImageRectOffset = Vector2.new(128, 288)
-	aimbotImage.ScaleType = Enum.ScaleType.Stretch
-	aimbotImage.Size = UDim2.fromScale(1, 1)
-	aimbotImage.ZIndex = 101
-	aimbotImage.Parent = btnInstaReset
-
-	local aimbotOverlay = Instance.new("TextLabel")
-	aimbotOverlay.Name = "AimbotLabel"
-	aimbotOverlay.BackgroundTransparency = 1
-	aimbotOverlay.Size = UDim2.new(1, -8, 1, 0)
-	aimbotOverlay.Position = UDim2.new(0, 4, 0, 0)
-	aimbotOverlay.Text = "AIMBOT"
-	aimbotOverlay.TextColor3 = Color3.fromRGB(255, 255, 255)
-	aimbotOverlay.TextSize = 10
-	aimbotOverlay.Font = Enum.Font.GothamBold
-	aimbotOverlay.TextWrapped = true
-	aimbotOverlay.TextXAlignment = Enum.TextXAlignment.Center
-	aimbotOverlay.TextYAlignment = Enum.TextYAlignment.Center
-	aimbotOverlay.ZIndex = 102
-	aimbotOverlay.Parent = btnInstaReset
-
-	local aimbotStroke = Instance.new("UIStroke")
-	aimbotStroke.Name = "AimbotOuterStroke"
-	aimbotStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	aimbotStroke.Color = Color3.fromRGB(0, 0, 0)
-	aimbotStroke.Thickness = 1.1
-	aimbotStroke.Transparency = 0.15
-	aimbotStroke.Parent = btnInstaReset
+	State._registerPurpleAnimatedButton(btnInstaReset)
+	attachRedTextShine(btnInstaReset)
 	Instance.new("UICorner", btnInstaReset).Name = "ButtonShapeCorner"
+	local instaResetStroke = Instance.new("UIStroke")
+	instaResetStroke.Name = "RedOuterStroke"
+	instaResetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	instaResetStroke.Color = Color3.fromRGB(0, 0, 0)
+	instaResetStroke.Thickness = 1.1
+	instaResetStroke.Transparency = 0.15
+	instaResetStroke.LineJoinMode = Enum.LineJoinMode.Round
+	instaResetStroke.Parent = btnInstaReset
 	applyMobileButtonsSize(State.buttonsSizeValue)
 
 	makeDraggable(btnInstaReset)
@@ -4509,19 +4479,21 @@ do
 	end)
 
 	btnInstaReset.Activated:Connect(function()
-		if btnBatV2 then btnBatV2:Activate() end
+		btnInstaReset:SetAttribute("PurpleFlash", true)
+		task.delay(0.55, function()
+			if btnInstaReset and btnInstaReset.Parent then
+				btnInstaReset:SetAttribute("PurpleFlash", false)
+			end
+		end)
+
+		if setInstaToggleVisual then
+			setInstaToggleVisual(true)
+			task.delay(0.2, function() setInstaToggleVisual(false) end)
+		end
+
+		task.spawn(cursedInstaReset)
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
-
-	btnInstaReset:SetAttribute("PurpleActive", btnBatV2 and btnBatV2:GetAttribute("PurpleActive") == true or false)
-	btnBatV2:GetAttributeChangedSignal("PurpleActive"):Connect(function()
-		btnInstaReset:SetAttribute("PurpleActive", btnBatV2:GetAttribute("PurpleActive") == true)
-		aimbotImage.ImageColor3 = btnBatV2:GetAttribute("PurpleActive") == true and Color3.fromRGB(255, 120, 255) or Color3.fromRGB(255, 255, 255)
-	end)
-	if btnBatV2:GetAttribute("PurpleActive") == true then
-		aimbotImage.ImageColor3 = Color3.fromRGB(255, 120, 255)
-	end
-
 
 	resetMobileButtons = function()
 		for name, btn in pairs(mobileButtonsByName) do
@@ -5108,43 +5080,81 @@ startBatAimbotV2 = function()
         end
 
         local target = getClosestPlayerV2()
-        if target and target.Character then
-            local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
-            if targetRoot then
-                local targetVelocity = targetRoot.AssemblyLinearVelocity
-                local movementDirection = targetVelocity.Magnitude > 0.1
-                    and targetVelocity.Unit
-                    or targetRoot.CFrame.LookVector
-
-                local offset = movementDirection * BAT_V2_FOLLOW_DIST
-                    + Vector3.new(0, BAT_V2_HEIGHT_OFFSET + BAT_V2_VERTICAL_OFFSET, 0)
-                local desiredPosition = targetRoot.Position + offset
-                local directionToTarget = desiredPosition - root.Position
-
-                if directionToTarget.Magnitude > 0.5 then
-                    local movementVector = directionToTarget.Unit * LUST_BYPASS_AIMBOT_SPEED
-                    root.AssemblyLinearVelocity = Vector3.new(
-                        movementVector.X,
-                        movementVector.Y,
-                        movementVector.Z
-                    )
-                else
-                    root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * 0.95
-                    if root.AssemblyLinearVelocity.Magnitude < 1 then
-                        root.AssemblyLinearVelocity = Vector3.zero
-                    end
-                end
-
-                if State.autoSwingEnabled
-                    and (root.Position - targetRoot.Position).Magnitude <= BAT_V2_HIT_DIST then
-                    tryHitBypassBat()
-                end
-            end
-        else
+        if not target or not target.Character then
             root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * 0.9
-            if root.AssemblyLinearVelocity.Magnitude < 1 then
-                root.AssemblyLinearVelocity = Vector3.zero
-            end
+            root.AssemblyAngularVelocity = Vector3.zero
+            return
+        end
+
+        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then return end
+
+        local targetVelocity = targetRoot.AssemblyLinearVelocity
+        local targetPos = targetRoot.Position
+
+        -- Small horizontal prediction; vertical tracking follows the target immediately.
+        local horizontalVelocity = Vector3.new(
+            targetVelocity.X,
+            0,
+            targetVelocity.Z
+        )
+        local predictTime = math.clamp(
+            horizontalVelocity.Magnitude / 180,
+            0.03,
+            0.10
+        )
+
+        local predictedXZ = targetPos + horizontalVelocity * predictTime
+        local desiredY =
+            targetPos.Y
+            + BAT_V2_HEIGHT_OFFSET
+            + BAT_V2_VERTICAL_OFFSET
+            + math.clamp(targetVelocity.Y * 0.08, -2, 2)
+
+        local desiredPosition = Vector3.new(
+            predictedXZ.X,
+            desiredY,
+            predictedXZ.Z
+        )
+
+        local toTarget = desiredPosition - root.Position
+        local distance = toTarget.Magnitude
+
+        if distance > 0.15 then
+            local chaseDir = toTarget.Unit
+            local chaseSpeed = math.max(LUST_BYPASS_AIMBOT_SPEED, 60)
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(
+                chaseDir * chaseSpeed,
+                0.90
+            )
+        else
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(
+                Vector3.zero,
+                0.65
+            )
+        end
+
+        -- Continuously face the target so the bat does not remain beside it at a bad angle.
+        local facePosition = targetPos + Vector3.new(0, 1.2, 0)
+        local faceVector = facePosition - root.Position
+
+        if faceVector.Magnitude > 0.05 then
+            local goalCF = CFrame.lookAt(root.Position, facePosition)
+            local deltaCF = root.CFrame:ToObjectSpace(goalCF)
+            local pitch, yaw, roll = deltaCF:ToOrientation()
+
+            root.AssemblyAngularVelocity = Vector3.new(
+                math.clamp(pitch * 35, -35, 35),
+                math.clamp(yaw * 55, -55, 55),
+                math.clamp(roll * 35, -35, 35)
+            )
+        else
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+
+        if State.autoSwingEnabled
+            and distance <= BAT_V2_HIT_DIST then
+            tryHitBypassBat()
         end
     end)
 end
@@ -7156,6 +7166,16 @@ UIS.InputBegan:Connect(function(inp,gp)
     elseif kbMatch(KB.TPBat,kc) then
         State._setTPBatEnabled(not State.tpBatEnabled)
         if State._tpBatSetVisual then State._tpBatSetVisual(State.tpBatEnabled) end
+    elseif kbMatch(KB.InstaReset,kc) then
+        task.spawn(cursedInstaReset)
+        if btnInstaReset and btnInstaReset.Parent then
+            btnInstaReset:SetAttribute("PurpleFlash", true)
+            task.delay(0.55, function() if btnInstaReset and btnInstaReset.Parent then btnInstaReset:SetAttribute("PurpleFlash", false) end end)
+        end
+        if setInstaToggleVisual then
+            setInstaToggleVisual(true)
+            task.delay(0.2, function() if setInstaToggleVisual then setInstaToggleVisual(false) end end)
+        end
     elseif kbMatch(KB.GuiHide,kc) then
         State.guiVisible=not State.guiVisible
         pcall(function() main.Visible=State.guiVisible end)
