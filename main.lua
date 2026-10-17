@@ -1,4 +1,4 @@
--- MVP HUB RED EDITION | optimized visual build
+-- MOYA DUELS V2 | optimized visual build
 local BG         = Color3.fromRGB(8, 0, 0)
 local SIDEBAR_BG = Color3.fromRGB(14, 0, 0)
 local CARD_BG    = Color3.fromRGB(28, 0, 0)
@@ -22,6 +22,18 @@ repeat task.wait() until game:IsLoaded()
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
+
+-- Prevent accidental reset from the Roblox escape menu; retry until CoreGui is ready.
+task.spawn(function()
+    local StarterGui = game:GetService("StarterGui")
+    for _ = 1, 12 do
+        local ok = pcall(function()
+            StarterGui:SetCore("ResetButtonCallback", false)
+        end)
+        if ok then break end
+        task.wait(0.5)
+    end
+end)
 
 task.spawn(function()
     local env = (getgenv and getgenv()) or _G
@@ -831,15 +843,15 @@ local HttpService = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 
 ;(function()
-local NS, CS, LS, LS2 = 31, 60, 15, 24.5
+local NS, CS, LS, LS2 = 30, 30, 15, 24.5
 
 local laggerPhase = 0 -- 0=off, 1=lagger, 2=lagger carry
 
 local State = {
 	speedToggled = false, laggerToggled = false, autoBatToggled = false,
 	speedProfile = "Normal",
-	profileLaggerNormalSpeed = 40,
-	profileLaggerCarrySpeed = 20,
+	profileLaggerNormalSpeed = 30,
+	profileLaggerCarrySpeed = 30,
 	hittingCooldown = false, infJumpEnabled = false,
 	antiRagdollEnabled = false, fpsBoostEnabled = false,
 	antiLagEnabled = false,
@@ -886,12 +898,12 @@ local KB = {
 	Drop      = {kb = Enum.KeyCode.X,           gp = nil},
 	TPDown    = {kb = Enum.KeyCode.F,           gp = nil},
 	AutoBat   = {kb = Enum.KeyCode.E,           gp = nil},
-	AutoBatV2 = {kb = nil,                      gp = nil},
-	TPBat     = {kb = nil,                      gp = nil},
+	AutoBatV2 = {kb = Enum.KeyCode.T,           gp = nil},  -- fixed: was nil
+	TPBat     = {kb = Enum.KeyCode.G,           gp = nil},  -- fixed: was nil
 	Speed     = {kb = Enum.KeyCode.Q,           gp = nil},
 	Lagger    = {kb = Enum.KeyCode.R,           gp = nil},
-	Lagger2   = {kb = nil,                      gp = nil},
-	InstaReset= {kb = nil,                      gp = nil},
+	Lagger2   = {kb = Enum.KeyCode.H,           gp = nil},  -- fixed: was nil
+	InstaReset= {kb = Enum.KeyCode.V,           gp = nil},  -- fixed: was nil
 	GuiHide   = {kb = Enum.KeyCode.LeftControl, gp = nil},
 }
 
@@ -1008,10 +1020,14 @@ stopBatAimbot = function()
 	_autoBatTarget = nil
 	_autoBatEquippedThisRun = false
 
-	if State._hitboxFollower and State._hitboxFollower.pausedByBatAim then
+	-- Turning Auto Bat V1 off also turns Hitbox Follower off.
+	if State._hitboxFollower then
 		State._hitboxFollower.pausedByBatAim = false
-		if State.hitboxFollowerEnabled and not State.tpBatEnabled then
-			State._hitboxFollower.start()
+		State.hitboxFollowerEnabled = false
+		if State._setHitboxFollower then
+			State._setHitboxFollower(false)
+		else
+			State._hitboxFollower.stop()
 		end
 	end
 end
@@ -1020,9 +1036,15 @@ startBatAimbot = function()
 	if Conns.aimbot then Conns.aimbot:Disconnect() end
 	_autoBatEquippedThisRun = false
 
-	if State._hitboxFollower and State.hitboxFollowerEnabled then
-		State._hitboxFollower.pausedByBatAim = true
-		State._hitboxFollower.stop()
+	-- Turning Auto Bat V1 on also turns Hitbox Follower on.
+	if State._hitboxFollower then
+		State.hitboxFollowerEnabled = true
+		State._hitboxFollower.pausedByBatAim = false
+		if State._setHitboxFollower then
+			State._setHitboxFollower(true)
+		else
+			State._hitboxFollower.start()
+		end
 	end
 
 	local hum0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
@@ -1050,25 +1072,30 @@ startBatAimbot = function()
 		local myPos = root.Position
 		local targetPos = target.Position
 
-		local predictPos = targetPos + targetVel * 0.14
-		predictPos = predictPos + target.CFrame.LookVector * 0.3
+		-- tighter prediction: snap onto the player's actual position
+		local predictTime0 = math.clamp(targetVel.Magnitude / 200, 0.02, 0.12)
+		local predictPos = targetPos + targetVel * predictTime0
 
 		local direction = predictPos - myPos
-		local flatDir = Vector3.new(direction.X, 0, direction.Z).Unit
-		local chaseSpeed = 60 -- Velocidad fija requerida en 60
+		local flatDir = Vector3.new(direction.X, 0, direction.Z)
+		if flatDir.Magnitude > 0.01 then flatDir = flatDir.Unit end
 
-		local desiredHeight = targetPos.Y + 3.7
-		local yVel = (desiredHeight - myPos.Y) * 19.5 + targetVel.Y * 0.8
+		local chaseSpeed = 90 -- raised: snaps onto target faster
+
+		-- sit at the same Y as the target (flush onto them, not floating above)
+		local desiredHeight = targetPos.Y + 0.0
+		local yVel = (desiredHeight - myPos.Y) * 28 + targetVel.Y * 1.0
 		if hum.FloorMaterial ~= Enum.Material.Air then
-			yVel = math.max(yVel, 13)
+			yVel = math.max(yVel, 18)
 		end
-		yVel = math.clamp(yVel, -70, 110)
+		yVel = math.clamp(yVel, -90, 130)
 
 		local desiredVel = Vector3.new(flatDir.X * chaseSpeed, yVel, flatDir.Z * chaseSpeed)
-		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 0.8)
+		-- Lerp 1.0 = instant snap, no lag behind the target
+		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 1.0)
 
 		local speed3 = targetVel.Magnitude
-		local predictTime = math.clamp(speed3 / 150, 0.05, 0.2)
+		local predictTime = math.clamp(speed3 / 150, 0.03, 0.15)
 		local predictedPos = targetPos + targetVel * predictTime
 		local toPredict = predictedPos - myPos
 		if toPredict.Magnitude > 0.1 then
@@ -1076,10 +1103,10 @@ startBatAimbot = function()
 			local curCF  = root.CFrame
 			local diffCF = curCF:Inverse() * goalCF
 			local rx, ry, rz = diffCF:ToEulerAnglesXYZ()
-			rx = math.clamp(rx, -2.5, 2.5)
-			ry = math.clamp(ry, -2.5, 2.5)
-			rz = math.clamp(rz, -2.5, 2.5)
-			local tiltSpeed = 42
+			rx = math.clamp(rx, -3.5, 3.5)
+			ry = math.clamp(ry, -3.5, 3.5)
+			rz = math.clamp(rz, -3.5, 3.5)
+			local tiltSpeed = 60 -- snappier rotation
 			root.AssemblyAngularVelocity = root.CFrame:VectorToWorldSpace(
 				Vector3.new(rx * tiltSpeed, ry * tiltSpeed, rz * tiltSpeed)
 			)
@@ -1167,7 +1194,7 @@ function State._hitboxFollower.start()
         State._hitboxFollower.conn:Disconnect()
     end
     State._hitboxFollower.conn = RunService.RenderStepped:Connect(function()
-        if State._hitboxFollower.enabled and not State.autoBatToggled and not State.tpBatEnabled then
+        if State._hitboxFollower.enabled and not State.tpBatEnabled then
             State._hitboxFollower.tick()
         end
     end)
@@ -1188,12 +1215,11 @@ end
 
 LP.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if State.hitboxFollowerEnabled and not State.autoBatToggled and not State.tpBatEnabled then
+    if State.hitboxFollowerEnabled and not State.tpBatEnabled then
         State._hitboxFollower.stop()
         task.wait(0.2)
         State._hitboxFollower.start()
-    elseif State.hitboxFollowerEnabled and (State.autoBatToggled or State.tpBatEnabled) then
-        State._hitboxFollower.pausedByBatAim = State.autoBatToggled == true
+    elseif State.hitboxFollowerEnabled and State.tpBatEnabled then
         State._hitboxFollower.stop()
     end
 end)
@@ -1364,8 +1390,6 @@ local _autoBatEquippedThisRun = false
 
 local autoBatV2SetVisual, setAutoBatV2, setHideButtonsVisual, setAutoTPDownVisual
 
-local cursedResetRemote = nil
-local CURSED_RESET_GUID = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
 local btnInstaReset = nil
 
 State.buttonsSizeValue = State.buttonsSizeValue or 50
@@ -1580,7 +1604,7 @@ local function showDiscordInProgressBar()
 	local originalSize = progressPct.TextSize
 	local originalAlign = progressPct.TextXAlignment
 
-	progressPct.Text = "MVP Hub"
+	progressPct.Text = "MOYA DUELS V2"
 	progressPct.TextColor3 = Color3.fromRGB(200, 0, 0) -- Cambiado a Rosa
 	progressPct.TextSize = 13
 	progressPct.TextXAlignment = Enum.TextXAlignment.Center
@@ -1892,73 +1916,19 @@ local function stopAutoTPDown()
 	if autoTPDownConn then task.cancel(autoTPDownConn); autoTPDownConn = nil end
 end
 
-pcall(function()
-	if hookfunction and newcclosure then
-		local oldFire
-		oldFire=hookfunction(Instance.new("RemoteEvent").FireServer,newcclosure(function(self,...)
-			if not cursedResetRemote and typeof(self)=="Instance" and self:IsA("RemoteEvent") and self.Name:sub(1,3)=="RE/" then
-				cursedResetRemote=self
-			end
-			return oldFire(self,...)
-		end))
-	end
-end)
+-- Safe one-shot reset: use the normal character death path instead of repeatedly
+-- firing a game RemoteEvent (which can cause server anti-cheat/kick behavior).
+local function safeInstaReset()
+    local character = LP.Character
+    if not character then return end
 
-task.spawn(function()
-	task.wait(2)
-	if cursedResetRemote then return end
-	for _,desc in ipairs(game:GetDescendants()) do
-		if desc:IsA("RemoteEvent") and desc.Name:sub(1,3)=="RE/" then
-			cursedResetRemote=desc
-			break
-		end
-	end
-end)
-
-local function cursedInstaReset()
-	if not cursedResetRemote then
-		for _,desc in ipairs(game:GetDescendants()) do
-			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3)=="RE/" then
-				cursedResetRemote=desc
-				break
-			end
-		end
-	end
-	if not cursedResetRemote then return end
-
-	local character = LP.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-	if humanoid and humanoid.Health <= 0 then
-		pcall(function() cursedResetRemote:FireServer(CURSED_RESET_GUID, LP, "balloon") end)
-		return
-	end
-
-	local resetDetected = false
-	local conns = {}
-
-	if humanoid then
-		table.insert(conns, humanoid.Died:Connect(function() resetDetected = true end))
-		table.insert(conns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-			if humanoid.Health <= 0 then resetDetected = true end
-		end))
-	end
-	if character then
-		table.insert(conns, character.AncestryChanged:Connect(function(_, parent)
-			if not parent then resetDetected = true end
-		end))
-	end
-
-	task.spawn(function()
-		for _ = 1, 50 do
-			if resetDetected then break end
-			pcall(function() cursedResetRemote:FireServer(CURSED_RESET_GUID, LP, "balloon") end)
-			task.wait()
-		end
-		for _, conn in ipairs(conns) do
-			pcall(function() conn:Disconnect() end)
-		end
-	end)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        pcall(function() humanoid.Health = 0 end)
+    else
+        -- Fallback for a character without a living Humanoid.
+        pcall(function() character:BreakJoints() end)
+    end
 end
 
 for _, name in pairs({"FEARV2GUI"}) do
@@ -2233,7 +2203,7 @@ local titleLbl = Instance.new("TextLabel", topbar)
 titleLbl.Size = UDim2.new(0, 190, 1, 0)
 titleLbl.Position = UDim2.new(0, 17, 0, -3)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "MVP Hub"
+titleLbl.Text = "MOYA DUELS V2"
 titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLbl.Font = Enum.Font.GothamBlack
 titleLbl.TextSize = 15
@@ -2423,7 +2393,7 @@ mini.Size = UDim2.new(0, 110, 0, 32)
 mini.Position = UDim2.new(0, 20, 0, 70)
 mini.BackgroundColor3 = BG
 mini.BorderSizePixel = 0
-mini.Text = "MVP Hub"
+mini.Text = "MOYA DUELS V2"
 mini.TextColor3 = Color3.fromRGB(255, 255, 255)
 mini.Font = Enum.Font.GothamBold
 mini.TextSize = 11
@@ -3130,7 +3100,7 @@ do
 			if State.laggerToggled then
 				modeValLbl.Text = laggerPhase == 2 and "Lagger 2" or "Lagger 1"
 			elseif State.speedToggled then
-				modeValLbl.Text = State.speedProfile == "Lagger" and ("Carry Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Carry"
+				modeValLbl.Text = State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve"
 			else
 				modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"
 			end
@@ -3156,7 +3126,7 @@ normalBox = rowInput("speed y aimbot", "Normal Speed", nil, NS, function(v)
 		if State.requestConfigSave then State.requestConfigSave() end
 	end
 end)
-carryBox = rowInput("speed y aimbot", "Carry Speed", nil, CS, function(v)
+carryBox = rowInput("speed y aimbot", "Curve Speed", nil, CS, function(v)
 	if type(v) == "number" and v > 0 then
 		if State.speedProfile == "Lagger" then
 			State.profileLaggerCarrySpeed = v
@@ -3191,7 +3161,7 @@ do
 			if mobileLaggerSetActive then mobileLaggerSetActive(false) end
 		end
 		if mobileSpeedSetActive then mobileSpeedSetActive(State.speedToggled) end
-		modeValLbl.Text = State.laggerToggled and "Lagger" or (State.speedToggled and (State.speedProfile == "Lagger" and ("Carry Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Carry") or (State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"))
+		modeValLbl.Text = State.laggerToggled and "Lagger" or (State.speedToggled and (State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve") or (State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"))
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
 end
@@ -3207,7 +3177,7 @@ do
 		if mobileLaggerSetActive then mobileLaggerSetActive(phase == 1) end
 		if mobileLaggerCarrySetActive then mobileLaggerCarrySetActive(phase == 2) end
 		if modeValLbl then
-			modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Carry" or "Normal"))
+			modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Curve" or "Normal"))
 		end
 		if State.requestConfigSave then State.requestConfigSave() end
 	end
@@ -3367,7 +3337,7 @@ setInstaToggleVisual = makePillToggle(cInsta, false, function(on)
 			end)
 		end
 
-		task.spawn(cursedInstaReset)
+		task.spawn(safeInstaReset)
 
 		task.wait(0.2)
 		if setInstaToggleVisual then setInstaToggleVisual(false) end
@@ -3491,11 +3461,10 @@ State._setHitboxFollower = rowToggle("performance y settings",
     function(on)
         State.hitboxFollowerEnabled = on == true
         if State.hitboxFollowerEnabled then
-            if State.autoBatToggled or State.tpBatEnabled then
-                State._hitboxFollower.pausedByBatAim = State.autoBatToggled == true
+            State._hitboxFollower.pausedByBatAim = false
+            if State.tpBatEnabled then
                 State._hitboxFollower.stop()
             else
-                State._hitboxFollower.pausedByBatAim = false
                 State._hitboxFollower.start()
             end
         else
@@ -4544,7 +4513,7 @@ do
 			task.delay(0.2, function() setInstaToggleVisual(false) end)
 		end
 
-		task.spawn(cursedInstaReset)
+		task.spawn(safeInstaReset)
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
 
@@ -4657,13 +4626,13 @@ do
 	end
 
 	do
-		local setter = select(2, createMobileButton("Speed", "CARRY\nSPD", 1, 2, true, function(on)
+		local setter = select(2, createMobileButton("Speed", "CURVE\nSPD", 1, 2, true, function(on)
 			State.speedToggled = on
 			if on then
 				State.laggerToggled = false
 				laggerPhase = 0
 				if mobileLaggerSetActive then mobileLaggerSetActive(false) end
-				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Carry Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Carry" end
+				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve" end
 			else
 				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal" end
 			end
@@ -4700,7 +4669,7 @@ do
 			if s1 then s1(phase == 1) end
 			if s2 then s2(phase == 2) end
 			if modeValLbl then
-				modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Carry" or "Normal"))
+				modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Curve" or "Normal"))
 			end
 			if State.requestConfigSave then State.requestConfigSave() end
 		end
@@ -6827,9 +6796,9 @@ loadConfig = function()
         if mobileLaggerSetActive then mobileLaggerSetActive(State.laggerToggled) end
         if modeValLbl then
             modeValLbl.Text =
-                laggerPhase == 2 and "Lagger Carry"
+                laggerPhase == 2 and "Lagger Curve"
                 or (State.laggerToggled and "Lagger")
-                or (State.speedToggled and (State.speedProfile == "Lagger" and ("Carry Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Carry"))
+                or (State.speedToggled and (State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve"))
                 or (State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal")
         end
 
@@ -7027,11 +6996,19 @@ local function setupChar(char)
     local head=char:FindFirstChild("Head")
     if head then
         local oldBB=head:FindFirstChild("FEARV2MobileBB"); if oldBB then oldBB:Destroy() end
-        local bb=Instance.new("BillboardGui",head); bb.Name="FEARV2MobileBB"
-        bb.Size=UDim2.new(0,160,0,24); bb.StudsOffset=Vector3.new(0,3,0); bb.AlwaysOnTop=true
+        local playerGui = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
+        if playerGui then
+            local oldGuiBB = playerGui:FindFirstChild("FEARV2MobileBB")
+            if oldGuiBB then oldGuiBB:Destroy() end
+        end
+        local bb=Instance.new("BillboardGui")
+        bb.Name="FEARV2MobileBB"; bb.Parent=playerGui or head
+        bb.Adornee=head; bb.Enabled=true; bb.MaxDistance=1000
+        bb.Size=UDim2.new(0,220,0,34); bb.StudsOffset=Vector3.new(0,3.2,0); bb.AlwaysOnTop=true
         speedLbl=Instance.new("TextLabel",bb); speedLbl.Name="SpeedBillLbl"
-        speedLbl.Size=UDim2.new(1,0,0,24); speedLbl.Position=UDim2.new(0,0,0,0); speedLbl.BackgroundTransparency=1
-        speedLbl.Text="0.0"; speedLbl.TextColor3=Color3.fromRGB(200, 0, 0)
+        speedLbl.Visible=true
+        speedLbl.Size=UDim2.new(1,0,1,0); speedLbl.Position=UDim2.new(0,0,0,0); speedLbl.BackgroundTransparency=0.15
+        speedLbl.BackgroundColor3=Color3.fromRGB(20, 20, 20); speedLbl.Text="SPEED: 0.0"; speedLbl.TextColor3=Color3.fromRGB(255, 255, 255)
         speedLbl.Font=Enum.Font.GothamBlack; speedLbl.TextScaled=true
         speedLbl.TextStrokeTransparency=0; speedLbl.TextStrokeColor3=Color3.fromRGB(0, 0, 0)
     end
@@ -7077,6 +7054,12 @@ RunService.RenderStepped:Connect(function()
 			and (laggerPhase == 2 and LS2 or LS)
 			or (State.speedToggled and getProfileCarrySpeed() or getProfileNormalSpeed())
 
+        -- Smooth carry/curve speed: gently oscillate between 26 and 30,
+        -- while Normal Speed remains at the selected base value (default 30).
+        if State.speedToggled and not State.laggerToggled then
+            spd = 28 + 2 * math.sin(os.clock() * 1.6)
+        end
+
         if type(spd) ~= "number" or spd < 0 then spd = 16 end
 
         -- Suavizado anti-kick: a 31 / 60 (y valores altos) no fuerza el velocity de golpe
@@ -7087,13 +7070,8 @@ RunService.RenderStepped:Connect(function()
                 h:Move(dir, false)
                 local cur = hrp.AssemblyLinearVelocity
                 local y = cur.Y
-                local desired = Vector3.new(dir.X * targetSpd, y, dir.Z * targetSpd)
-                -- Lerp mÃ¡s suave si el speed es alto (menos flags del anti-cheat)
-                local alpha = 0.55
-                if targetSpd >= 28 then alpha = 0.38 end
-                if targetSpd >= 50 then alpha = 0.28 end
-                if targetSpd >= 60 then alpha = 0.22 end
-                hrp.AssemblyLinearVelocity = cur:Lerp(desired, alpha)
+                -- Mantener la velocidad horizontal objetivo exacta; conservar la velocidad vertical.
+                hrp.AssemblyLinearVelocity = Vector3.new(dir.X * targetSpd, y, dir.Z * targetSpd)
             end)
         end
 
@@ -7116,13 +7094,15 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-    pcall(function()
-        if speedLbl then
-            local vel = hrp.AssemblyLinearVelocity
-            local hspd = Vector3.new(vel.X, 0, vel.Z).Magnitude
-            speedLbl.Text = string.format("%.1f", hspd)
-        end
-    end)
+end)
+
+-- Auto-update the speed display at all times, even when no speed mode is toggled.
+RunService.RenderStepped:Connect(function()
+    if not (speedLbl and speedLbl.Parent and hrp and hrp.Parent) then return end
+    local vel = hrp.AssemblyLinearVelocity
+    local hspd = Vector3.new(vel.X, 0, vel.Z).Magnitude
+    speedLbl.Text = string.format("SPEED: %.1f", hspd)
+    speedLbl.Visible = true
 end)
 
 UIS.InputBegan:Connect(function(inp,gp)
@@ -7133,7 +7113,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         State.laggerToggled = false; laggerPhase = 0
         State.speedToggled = not State.speedToggled
         if mobileLaggerSetActive then mobileLaggerSetActive(false) end
-        if modeValLbl then modeValLbl.Text = State.speedToggled and "Carry" or "Normal" end
+        if modeValLbl then modeValLbl.Text = State.speedToggled and "Curve" or "Normal" end
     elseif kbMatch(KB.AutoLeft,kc) then
         State.autoLeftEnabled=not State.autoLeftEnabled
         if State.autoLeftEnabled and State.autoBatToggled then State.autoBatToggled=false; stopBatAimbot(); if autoBatSetVisual then autoBatSetVisual(false) end end
@@ -7182,7 +7162,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         State._setTPBatEnabled(not State.tpBatEnabled)
         if State._tpBatSetVisual then State._tpBatSetVisual(State.tpBatEnabled) end
     elseif kbMatch(KB.InstaReset,kc) then
-        task.spawn(cursedInstaReset)
+        task.spawn(safeInstaReset)
         if btnInstaReset and btnInstaReset.Parent then
             btnInstaReset:SetAttribute("PurpleFlash", true)
             task.delay(0.55, function() if btnInstaReset and btnInstaReset.Parent then btnInstaReset:SetAttribute("PurpleFlash", false) end end)
@@ -7242,7 +7222,7 @@ pcall(function()
     end)
 end)
 
-print("[MVP Hub] Loaded!")
+print("[MOYA DUELS V2] Loaded!")
 
 end)()
 
