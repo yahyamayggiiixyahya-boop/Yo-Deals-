@@ -1080,7 +1080,7 @@ startBatAimbot = function()
 		local flatDir = Vector3.new(direction.X, 0, direction.Z)
 		if flatDir.Magnitude > 0.01 then flatDir = flatDir.Unit end
 
-		local chaseSpeed = 90 -- raised: snaps onto target faster
+		local chaseSpeed = 55 -- reduced chase speed
 
 		-- sit at the same Y as the target (flush onto them, not floating above)
 		local desiredHeight = targetPos.Y + 0.0
