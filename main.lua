@@ -23,17 +23,45 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 
--- Prevent accidental reset from the Roblox escape menu; retry until CoreGui is ready.
-task.spawn(function()
-    local StarterGui = game:GetService("StarterGui")
-    for _ = 1, 12 do
-        local ok = pcall(function()
-            StarterGui:SetCore("ResetButtonCallback", false)
-        end)
-        if ok then break end
-        task.wait(0.5)
+-- Load Catbox images as local assets when the executor supports custom assets.
+local function resolveImageSource(source, fileName)
+    source = tostring(source or "")
+    if not source:match("^https?://") then
+        return "rbxassetid://" .. source
     end
-end)
+    local assetFn = getcustomasset or getsynasset
+    if type(assetFn) == "function" and type(writefile) == "function" then
+        local cached
+        pcall(function()
+            if type(isfile) == "function" and isfile(fileName) then
+                cached = assetFn(fileName)
+            end
+        end)
+        if cached then return cached end
+        local data
+        pcall(function()
+            local req = request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
+            if type(req) == "function" then
+                local response = req({Url = source, Method = "GET", Headers = {["User-Agent"] = "Mozilla/5.0"}})
+                if type(response) == "table" and (response.StatusCode == nil or response.StatusCode == 200) then
+                    data = response.Body or response.body
+                end
+            end
+        end)
+        if type(data) ~= "string" or #data < 100 then
+            pcall(function() data = game:HttpGet(source, true) end)
+        end
+        if type(data) == "string" and #data >= 100 then
+            pcall(function()
+                writefile(fileName, data)
+                cached = assetFn(fileName)
+            end)
+            if cached then return cached end
+        end
+    end
+    -- Fallback for environments that can directly resolve remote image URLs.
+    return source
+end
 
 task.spawn(function()
     local env = (getgenv and getgenv()) or _G
@@ -249,7 +277,7 @@ do
                 end
             end)
             pcall(function() introDone:Fire() end)
-            -- ðŸ”¥ ESTA ES LA LÃNEA CLAVE QUE FALTABA:
+            -- 🔥 ESTA ES LA LÍNEA CLAVE QUE FALTABA:
             local env = (getgenv and getgenv()) or _G
             env.__MVP_INTRO_FINISHED_RUN = env.__MVP_HIGH_PING_RUN
         end
@@ -348,7 +376,7 @@ do
                 end)
             end)
         end
-        -- Arranca la mÃºsica en cuanto se arma la intro
+        -- Arranca la música en cuanto se arma la intro
         startIntroMusic()
 
         introLayer = Instance.new("Frame")
@@ -362,7 +390,7 @@ do
         introLayer.ZIndex = 1000
         introLayer.Parent = screenGui
 
-        -- BotÃ³n OMITIR (abajo a la derecha)
+        -- Botón OMITIR (abajo a la derecha)
         local skipBtn = Instance.new("TextButton")
         skipBtn.Name = "SkipIntroBtn"
         skipBtn.AnchorPoint = Vector2.new(1, 1)
@@ -410,7 +438,7 @@ do
         introImage.AnchorPoint = Vector2.new(0.5, 0.5)
         introImage.Position = UDim2.fromScale(0.5, 0.5)
         introImage.Size = UDim2.fromScale(1.08, 1.08)
-        introImage.Image = "rbxassetid://117085976067902"
+        introImage.Image = resolveImageSource("https://files.catbox.moe/9fh79z.jpg", "moya_duels_intro_bg.jpg")
         introImage.ScaleType = Enum.ScaleType.Crop
         introImage.ImageColor3 = Color3.fromRGB(160, 160, 160)
         introImage.ImageTransparency = 0.58
@@ -471,9 +499,9 @@ do
             label.Position = UDim2.fromScale(0.5, 0.5)
             label.Size = UDim2.new(1, -12, 0, 110)
             label.Font = Enum.Font.GothamBlack
-            label.Text = "â†»  MVP  â†»"
+            label.Text = "MOYA DUELS V2"
             label.TextColor3 = color
-            label.TextSize = 58
+            label.TextSize = 34
             label.TextTransparency = transparency
             label.TextStrokeColor3 = Color3.fromRGB(45, 0, 0)
             label.TextStrokeTransparency = 0.18
@@ -485,7 +513,7 @@ do
         local introGlitchDark = makeIntroText("GlitchDark", Color3.fromRGB(20, 20, 20), 1, 1005)
         local introGlitchBright = makeIntroText("GlitchBright", Color3.fromRGB(230, 230, 230), 1, 1006)
         local introTitleGlow = makeIntroText("IntroTitleGlow", Color3.fromRGB(0, 0, 0), 1, 1007)
-        introTitleGlow.TextSize = 64
+        introTitleGlow.TextSize = 38
         introTitleGlow.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         introTitleGlow.TextStrokeTransparency = 0.35
 
@@ -696,7 +724,7 @@ do
 
         task.spawn(function()
             local ok, err = xpcall(function()
-            -- 1) Todo negro + mÃºsica al ejecutar
+            -- 1) Todo negro + música al ejecutar
             introLayer.BackgroundTransparency = 0
             introLayer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             introImage.ImageTransparency = 1
@@ -711,7 +739,7 @@ do
             startIntroMusic()
             task.wait(0.25)
 
-            -- 2) Negro â†’ transparente (se va abriendo)
+            -- 2) Negro → transparente (se va abriendo)
             TweenService:Create(introLayer, TweenInfo.new(0.95, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 BackgroundTransparency = 0.55
             }):Play()
@@ -724,10 +752,14 @@ do
             -- 3) (Sonido de motosierra eliminado)
 
             -- 4) MVP vs entra por los costados + sonido de espada (libera la espada)
-            introTitle.Text = "MVP"
-            introTitleGlow.Text = "MVP"
-            introGlitchBright.Text = "MVP"
-            introGlitchDark.Text = "MVP"
+            introTitle.Text = "MOYA DUELS V2"
+            introTitleGlow.Text = "MOYA DUELS V2"
+            introGlitchBright.Text = "MOYA DUELS V2"
+            introGlitchDark.Text = "MOYA DUELS V2"
+            introTitle.TextSize = 40
+            introTitleGlow.TextSize = 44
+            introGlitchBright.TextSize = 40
+            introGlitchDark.TextSize = 40
             introVs.Text = "vs"
             introVsGlow.Text = "vs"
             introVsGhost.Text = "vs"
@@ -763,7 +795,7 @@ do
             end
             task.wait(0.50)
 
-            -- Fondo de portada mÃ¡s visible
+            -- Fondo de portada más visible
             TweenService:Create(introLayer, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 BackgroundColor3 = Color3.fromRGB(8, 0, 0),
                 BackgroundTransparency = 0.28
@@ -795,7 +827,7 @@ do
             glitchBurst(10, 0.16)
             task.wait(0.08)
 
-            -- Cierre rÃ¡pido
+            -- Cierre rápido
             glitchBurst(14, 0.18)
             TweenService:Create(introContent, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                 Size = UDim2.new(1.10, 0, 0, 208)
@@ -843,15 +875,15 @@ local HttpService = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 
 ;(function()
-local NS, CS, LS, LS2 = 30, 30, 15, 24.5
+local NS, CS, LS, LS2 = 31, 60, 15, 24.5
 
 local laggerPhase = 0 -- 0=off, 1=lagger, 2=lagger carry
 
 local State = {
 	speedToggled = false, laggerToggled = false, autoBatToggled = false,
 	speedProfile = "Normal",
-	profileLaggerNormalSpeed = 30,
-	profileLaggerCarrySpeed = 30,
+	profileLaggerNormalSpeed = 40,
+	profileLaggerCarrySpeed = 20,
 	hittingCooldown = false, infJumpEnabled = false,
 	antiRagdollEnabled = false, fpsBoostEnabled = false,
 	antiLagEnabled = false,
@@ -868,10 +900,10 @@ local State = {
 	unwalkEnabled = false,
 	stretchRezEnabled = false, removeAccessoriesEnabled = false,
 	darkModeEnabled = false, skyStyle = "Off",
-	backgroundAssetId = "117085976067902",
-	backgroundAssetIds = {
-		"117085976067902",
-	},
+	backgroundAssetId = "https://files.catbox.moe/9fh79z.jpg",
+    backgroundAssetIds = {
+        "https://files.catbox.moe/9fh79z.jpg",
+    },
 	imageChoiceVisuals = {},
 }
 
@@ -898,12 +930,12 @@ local KB = {
 	Drop      = {kb = Enum.KeyCode.X,           gp = nil},
 	TPDown    = {kb = Enum.KeyCode.F,           gp = nil},
 	AutoBat   = {kb = Enum.KeyCode.E,           gp = nil},
-	AutoBatV2 = {kb = Enum.KeyCode.T,           gp = nil},  -- fixed: was nil
-	TPBat     = {kb = Enum.KeyCode.G,           gp = nil},  -- fixed: was nil
+	AutoBatV2 = {kb = nil,                      gp = nil},
+	TPBat     = {kb = nil,                      gp = nil},
 	Speed     = {kb = Enum.KeyCode.Q,           gp = nil},
 	Lagger    = {kb = Enum.KeyCode.R,           gp = nil},
-	Lagger2   = {kb = Enum.KeyCode.H,           gp = nil},  -- fixed: was nil
-	InstaReset= {kb = Enum.KeyCode.V,           gp = nil},  -- fixed: was nil
+	Lagger2   = {kb = nil,                      gp = nil},
+	InstaReset= {kb = nil,                      gp = nil},
 	GuiHide   = {kb = Enum.KeyCode.LeftControl, gp = nil},
 }
 
@@ -1020,14 +1052,10 @@ stopBatAimbot = function()
 	_autoBatTarget = nil
 	_autoBatEquippedThisRun = false
 
-	-- Turning Auto Bat V1 off also turns Hitbox Follower off.
-	if State._hitboxFollower then
+	if State._hitboxFollower and State._hitboxFollower.pausedByBatAim then
 		State._hitboxFollower.pausedByBatAim = false
-		State.hitboxFollowerEnabled = false
-		if State._setHitboxFollower then
-			State._setHitboxFollower(false)
-		else
-			State._hitboxFollower.stop()
+		if State.hitboxFollowerEnabled and not State.tpBatEnabled then
+			State._hitboxFollower.start()
 		end
 	end
 end
@@ -1036,15 +1064,9 @@ startBatAimbot = function()
 	if Conns.aimbot then Conns.aimbot:Disconnect() end
 	_autoBatEquippedThisRun = false
 
-	-- Turning Auto Bat V1 on also turns Hitbox Follower on.
-	if State._hitboxFollower then
-		State.hitboxFollowerEnabled = true
-		State._hitboxFollower.pausedByBatAim = false
-		if State._setHitboxFollower then
-			State._setHitboxFollower(true)
-		else
-			State._hitboxFollower.start()
-		end
+	if State._hitboxFollower and State.hitboxFollowerEnabled then
+		State._hitboxFollower.pausedByBatAim = true
+		State._hitboxFollower.stop()
 	end
 
 	local hum0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
@@ -1072,30 +1094,25 @@ startBatAimbot = function()
 		local myPos = root.Position
 		local targetPos = target.Position
 
-		-- tighter prediction: snap onto the player's actual position
-		local predictTime0 = math.clamp(targetVel.Magnitude / 200, 0.02, 0.12)
-		local predictPos = targetPos + targetVel * predictTime0
+		local predictPos = targetPos + targetVel * 0.14
+		predictPos = predictPos + target.CFrame.LookVector * 0.3
 
 		local direction = predictPos - myPos
-		local flatDir = Vector3.new(direction.X, 0, direction.Z)
-		if flatDir.Magnitude > 0.01 then flatDir = flatDir.Unit end
+		local flatDir = Vector3.new(direction.X, 0, direction.Z).Unit
+		local chaseSpeed = 60 -- Velocidad fija requerida en 60
 
-		local chaseSpeed = 55 -- reduced chase speed
-
-		-- sit at the same Y as the target (flush onto them, not floating above)
-		local desiredHeight = targetPos.Y + 0.0
-		local yVel = (desiredHeight - myPos.Y) * 28 + targetVel.Y * 1.0
+		local desiredHeight = targetPos.Y + 3.7
+		local yVel = (desiredHeight - myPos.Y) * 19.5 + targetVel.Y * 0.8
 		if hum.FloorMaterial ~= Enum.Material.Air then
-			yVel = math.max(yVel, 18)
+			yVel = math.max(yVel, 13)
 		end
-		yVel = math.clamp(yVel, -90, 130)
+		yVel = math.clamp(yVel, -70, 110)
 
 		local desiredVel = Vector3.new(flatDir.X * chaseSpeed, yVel, flatDir.Z * chaseSpeed)
-		-- Lerp 1.0 = instant snap, no lag behind the target
-		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 1.0)
+		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 0.8)
 
 		local speed3 = targetVel.Magnitude
-		local predictTime = math.clamp(speed3 / 150, 0.03, 0.15)
+		local predictTime = math.clamp(speed3 / 150, 0.05, 0.2)
 		local predictedPos = targetPos + targetVel * predictTime
 		local toPredict = predictedPos - myPos
 		if toPredict.Magnitude > 0.1 then
@@ -1103,10 +1120,10 @@ startBatAimbot = function()
 			local curCF  = root.CFrame
 			local diffCF = curCF:Inverse() * goalCF
 			local rx, ry, rz = diffCF:ToEulerAnglesXYZ()
-			rx = math.clamp(rx, -3.5, 3.5)
-			ry = math.clamp(ry, -3.5, 3.5)
-			rz = math.clamp(rz, -3.5, 3.5)
-			local tiltSpeed = 60 -- snappier rotation
+			rx = math.clamp(rx, -2.5, 2.5)
+			ry = math.clamp(ry, -2.5, 2.5)
+			rz = math.clamp(rz, -2.5, 2.5)
+			local tiltSpeed = 42
 			root.AssemblyAngularVelocity = root.CFrame:VectorToWorldSpace(
 				Vector3.new(rx * tiltSpeed, ry * tiltSpeed, rz * tiltSpeed)
 			)
@@ -1194,7 +1211,7 @@ function State._hitboxFollower.start()
         State._hitboxFollower.conn:Disconnect()
     end
     State._hitboxFollower.conn = RunService.RenderStepped:Connect(function()
-        if State._hitboxFollower.enabled and not State.tpBatEnabled then
+        if State._hitboxFollower.enabled and not State.autoBatToggled and not State.tpBatEnabled then
             State._hitboxFollower.tick()
         end
     end)
@@ -1215,11 +1232,12 @@ end
 
 LP.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if State.hitboxFollowerEnabled and not State.tpBatEnabled then
+    if State.hitboxFollowerEnabled and not State.autoBatToggled and not State.tpBatEnabled then
         State._hitboxFollower.stop()
         task.wait(0.2)
         State._hitboxFollower.start()
-    elseif State.hitboxFollowerEnabled and State.tpBatEnabled then
+    elseif State.hitboxFollowerEnabled and (State.autoBatToggled or State.tpBatEnabled) then
+        State._hitboxFollower.pausedByBatAim = State.autoBatToggled == true
         State._hitboxFollower.stop()
     end
 end)
@@ -1294,7 +1312,7 @@ State._safeReadFile = function(path)
 	end
 	local ok, result = pcall(reader, path)
 	if not ok or type(result) ~= "string" or result == "" then
-		return nil, ok and "archivo vacÃ­o" or tostring(result)
+		return nil, ok and "archivo vacío" or tostring(result)
 	end
 	return result
 end
@@ -1319,7 +1337,7 @@ State._writeVerifiedJson = function(path, encoded)
 	if not writeOk then return false, writeErr end
 	local decoded, raw = State._readValidJsonFile(path)
 	if type(decoded) ~= "table" or raw ~= encoded then
-		return false, "la verificaciÃ³n del archivo fallÃ³: " .. tostring(path)
+		return false, "la verificación del archivo falló: " .. tostring(path)
 	end
 	return true
 end
@@ -1327,7 +1345,7 @@ end
 State._atomicJsonSave = function(mainPath, backupPath, tempPath, encoded)
 	local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(encoded) end)
 	if not jsonOk or type(decoded) ~= "table" then
-		return false, "JSON invÃ¡lido antes de guardar"
+		return false, "JSON inválido antes de guardar"
 	end
 
 	local currentData, currentRaw = State._readValidJsonFile(mainPath)
@@ -1559,9 +1577,13 @@ local function safetyTeleport(root, humanoid, destination, preserveYaw)
 end
 
 local function safetyTeleportToFloor(character, humanoid, root)
+	if not root or not root.Parent or not humanoid or humanoid.Health <= 0 then return false end
 	local landing = safetyFloorPosition(root, character)
 	if not landing then
-		root.AssemblyLinearVelocity = Vector3.zero
+		-- If no floor can be raycast (for example, on streamed/mobile areas),
+		-- do not freeze the character in mid-air: descend quickly instead.
+		local velocity = root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity = Vector3.new(velocity.X, -260, velocity.Z)
 		root.AssemblyAngularVelocity = Vector3.zero
 		return false
 	end
@@ -1916,18 +1938,20 @@ local function stopAutoTPDown()
 	if autoTPDownConn then task.cancel(autoTPDownConn); autoTPDownConn = nil end
 end
 
--- Safe one-shot reset: use the normal character death path instead of repeatedly
--- firing a game RemoteEvent (which can cause server anti-cheat/kick behavior).
-local function safeInstaReset()
+local function cursedInstaReset()
+    -- Use the game's ordinary character-death/respawn flow once.
+    -- Do not fire private reset remotes repeatedly; that can trigger server anti-spam kicks.
     local character = LP.Character
-    if not character then return end
-
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health > 0 then
-        pcall(function() humanoid.Health = 0 end)
-    else
-        -- Fallback for a character without a living Humanoid.
-        pcall(function() character:BreakJoints() end)
+        pcall(function()
+            humanoid.Health = 0
+        end)
+    elseif character then
+        -- Fallback for characters without a Humanoid reference.
+        pcall(function()
+            character:BreakJoints()
+        end)
     end
 end
 
@@ -2005,7 +2029,7 @@ local _C={
 	[2]=Color3.fromRGB(14, 0, 0),
 	[3]=Color3.fromRGB(28, 0, 0),
 	[4]=Color3.fromRGB(70, 8, 8),
-	[5]=Color3.fromRGB(50, 130, 220),   -- BORDER azul (lÃ­neas de opciones)
+	[5]=Color3.fromRGB(50, 130, 220),   -- BORDER azul (líneas de opciones)
 	[6]=Color3.fromRGB(80, 165, 255),   -- BORDER2 azul
 	[7]=Color3.fromRGB(255, 255, 255),  -- WHITE real (textos en blanco)
 	[8]=Color3.fromRGB(235, 235, 235), -- DIM texto secundario blanco
@@ -2016,7 +2040,7 @@ local BG=_C[1];local SIDEBAR_BG=_C[2];local CARD_BG=_C[3];local CARD_HOV=_C[4]
 local BORDER=_C[5];local BORDER2=_C[6];local WHITE=_C[7];local DIM=_C[8]
 local DIM2=_C[9];local KB_BG=_C[10];local INPUT_BG=_C[10]
 local LABEL_TEXT = Color3.fromRGB(255, 255, 255)  -- Blanco textos de opciones
-local LABEL_SUB  = Color3.fromRGB(230, 230, 230) -- Blanco suave subtÃ­tulos
+local LABEL_SUB  = Color3.fromRGB(230, 230, 230) -- Blanco suave subtítulos
 
 
 local function makeDraggableY(guiObject)
@@ -2085,7 +2109,7 @@ main.BorderSizePixel = 0
 main.Active = true
 main.ClipsDescendants = true
 main.Visible = false
-main.BackgroundTransparency = 0 -- MODIFICADO: Removida transparencia para que se mantenga sÃ³lido tal cual
+main.BackgroundTransparency = 0 -- MODIFICADO: Removida transparencia para que se mantenga sólido tal cual
 
 local mainCorner = Instance.new("UICorner", main)
 mainCorner.CornerRadius = UDim.new(0, CORNER)
@@ -2118,7 +2142,7 @@ fullUIBackground.Size = UDim2.new(1, -2, 1, -2)
 fullUIBackground.Position = UDim2.new(0, 1, 0, 1)
 fullUIBackground.BackgroundTransparency = 1
 fullUIBackground.BorderSizePixel = 0
-fullUIBackground.Image = "rbxassetid://" .. tostring(State.backgroundAssetId)
+fullUIBackground.Image = resolveImageSource(State.backgroundAssetId, "moya_duels_menu_bg.jpg")
 fullUIBackground.ImageTransparency = 0.68
 fullUIBackground.ScaleType = Enum.ScaleType.Crop
 fullUIBackground.ImageColor3 = Color3.fromRGB(120, 120, 120)
@@ -2136,7 +2160,7 @@ State.applyBackgroundImage = function(assetId, shouldSave)
 
 	State.backgroundAssetId = assetId
 	if fullUIBackground and fullUIBackground.Parent then
-		fullUIBackground.Image = "rbxassetid://" .. assetId
+		fullUIBackground.Image = resolveImageSource(assetId, "moya_duels_menu_bg.jpg")
 	end
 
 	for id, visual in pairs(State.imageChoiceVisuals) do
@@ -2146,7 +2170,7 @@ State.applyBackgroundImage = function(assetId, shouldSave)
 			visual.stroke.Thickness = selected and 2.2 or 1
 		end
 		if visual.badge then
-			visual.badge.Text = selected and ("âœ“ " .. tostring(visual.index)) or tostring(visual.index)
+			visual.badge.Text = selected and ("✓ " .. tostring(visual.index)) or tostring(visual.index)
 			visual.badge.BackgroundColor3 = selected and WHITE or Color3.fromRGB(16, 0, 0)
 			visual.badge.TextColor3 = selected and BG or WHITE
 		end
@@ -2214,7 +2238,7 @@ local verLbl = Instance.new("TextLabel", topbar)
 verLbl.Size = UDim2.new(0, 240, 0, 14)
 verLbl.Position = UDim2.new(0, 18, 0, 28)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "mvp by valentÃ­n"
+verLbl.Text = "MOYA DUELS V2"
 verLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 verLbl.Font = Enum.Font.Gotham
 verLbl.TextSize = 8
@@ -2281,7 +2305,7 @@ minBtn.Size = UDim2.new(0, 26, 0, 26)
 minBtn.Position = UDim2.new(1, -36, 0.5, -13)
 minBtn.BackgroundColor3 = KB_BG
 minBtn.BorderSizePixel = 0
-minBtn.Text = "â€“"
+minBtn.Text = "–"
 minBtn.TextColor3 = WHITE -- Rojo
 minBtn.Font = Enum.Font.GothamBlack
 minBtn.TextSize = 16
@@ -2367,20 +2391,27 @@ do
 	end)
 end
 
-local TAB_BAR_H = 46
+-- Left-side navigation: keeps the same tabs and features, but changes their layout.
+local SIDEBAR_W = 126
 local sidebar = Instance.new("Frame", main)
 sidebar.Name = "TabBar"
-sidebar.Size = UDim2.new(1, -16, 0, TAB_BAR_H)
-sidebar.Position = UDim2.new(0, 8, 0, 48)
-sidebar.BackgroundTransparency = 1
+sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, -58)
+sidebar.Position = UDim2.new(0, 8, 0, 50)
+sidebar.BackgroundColor3 = SIDEBAR_BG
+sidebar.BackgroundTransparency = 0.12
 sidebar.BorderSizePixel = 0
 sidebar.ZIndex = 5
-sidebar.ClipsDescendants = false
+sidebar.ClipsDescendants = true
+Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
+local sidebarStroke = Instance.new("UIStroke", sidebar)
+sidebarStroke.Color = BORDER
+sidebarStroke.Thickness = 1
+sidebarStroke.Transparency = 0.25
 
 local content = Instance.new("Frame", main)
 content.Name = "ContentArea"
-content.Size = UDim2.new(1, -4, 1, -(48 + TAB_BAR_H + 8))
-content.Position = UDim2.new(0, 2, 0, 48 + TAB_BAR_H)
+content.Size = UDim2.new(1, -(SIDEBAR_W + 22), 1, -58)
+content.Position = UDim2.new(0, SIDEBAR_W + 14, 0, 50)
 content.BackgroundColor3 = BG
 content.BackgroundTransparency = 1
 content.BorderSizePixel = 0
@@ -2418,7 +2449,7 @@ local function showGui()
     mini.Visible = false
     State.guiVisible = true
 
-    main.BackgroundTransparency = 0 -- MODIFICADO: Mantenido en 0 sÃ³lido
+    main.BackgroundTransparency = 0 -- MODIFICADO: Mantenido en 0 sólido
     mainUIScale.Scale = 0.85
 
     TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
@@ -2461,15 +2492,15 @@ tabListFrame.BorderSizePixel = 0
 tabListFrame.ZIndex = 6
 
 local tabLL = Instance.new("UIListLayout", tabListFrame)
-tabLL.FillDirection = Enum.FillDirection.Horizontal
+tabLL.FillDirection = Enum.FillDirection.Vertical
 tabLL.HorizontalAlignment = Enum.HorizontalAlignment.Center
-tabLL.VerticalAlignment = Enum.VerticalAlignment.Center
+tabLL.VerticalAlignment = Enum.VerticalAlignment.Top
 tabLL.SortOrder = Enum.SortOrder.LayoutOrder
-tabLL.Padding = UDim.new(0, 8)
+tabLL.Padding = UDim.new(0, 7)
 local tabPad = Instance.new("UIPadding", tabListFrame)
-tabPad.PaddingTop = UDim.new(0, 2)
-tabPad.PaddingLeft = UDim.new(0, 2)
-tabPad.PaddingRight = UDim.new(0, 2)
+tabPad.PaddingTop = UDim.new(0, 10)
+tabPad.PaddingLeft = UDim.new(0, 5)
+tabPad.PaddingRight = UDim.new(0, 5)
 
 local ACTIVE_TAB_BG  = CARD_HOV
 local ACTIVE_TAB_TXT = WHITE -- Rojo
@@ -2500,14 +2531,14 @@ end
 
 for i, td in ipairs(tabDefs) do
 	local btn = Instance.new("TextButton", tabListFrame)
-	btn.Size = UDim2.new(0, 124, 0, 28)
+	btn.Size = UDim2.new(1, -10, 0, 36)
 	btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	btn.BackgroundTransparency = 0.15
 	btn.BorderSizePixel = 0
 	btn.Text = ""
 	btn.LayoutOrder = i
 	btn.ZIndex = 7
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 	local bSt = Instance.new("UIStroke", btn)
 	bSt.Color = Color3.fromRGB(40, 40, 40)
 	bSt.Thickness = 1.2
@@ -2515,8 +2546,8 @@ for i, td in ipairs(tabDefs) do
 
 	local pin = Instance.new("Frame", btn)
 	pin.Name = "Pin"
-	pin.Size = UDim2.new(0, 10, 0, 10)
-	pin.Position = UDim2.new(0.5, -5, 1, -2)
+	pin.Size = UDim2.new(0, 0, 0, 0)
+	pin.Position = UDim2.new(0, 0, 0, 0)
 	pin.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	pin.BorderSizePixel = 0
 	pin.Rotation = 45
@@ -2524,21 +2555,21 @@ for i, td in ipairs(tabDefs) do
 	Instance.new("UICorner", pin).CornerRadius = UDim.new(0, 2)
 
 	local lbl = Instance.new("TextLabel", btn)
-	lbl.Size = UDim2.new(1, -8, 1, 0)
-	lbl.Position = UDim2.new(0, 4, 0, 0)
+	lbl.Size = UDim2.new(1, -18, 1, 0)
+	lbl.Position = UDim2.new(0, 13, 0, 0)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = td.name
 	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 9
+	lbl.TextSize = 10
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
 	lbl.TextWrapped = false
 	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.ZIndex = 9
 	local activeMark = Instance.new("Frame", btn)
 	activeMark.Name = "ActiveMark"
-	activeMark.Size = UDim2.new(0, 5, 0, 5)
-	activeMark.Position = UDim2.new(0.5, -2, 1, 8)
+	activeMark.Size = UDim2.new(0, 3, 0, 18)
+	activeMark.Position = UDim2.new(0, 4, 0.5, -9)
 	activeMark.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	activeMark.BackgroundTransparency = 0.2
 	activeMark.BorderSizePixel = 0
@@ -2759,7 +2790,7 @@ local function makeKB(parent, kbEntry, onChange)
 	local li = false; local lc; local pv = b.Text
 	b.MouseButton1Click:Connect(function()
 		if li then li=false; _anyKeyListening=false; if lc then lc:Disconnect(); lc=nil end; b.Text=pv; b.TextColor3=WHITE; return end
-		pv=b.Text; li=true; _anyKeyListening=true; b.Text="Â·Â·Â·"; b.TextColor3=DIM
+		pv=b.Text; li=true; _anyKeyListening=true; b.Text="···"; b.TextColor3=DIM
 		TweenService:Create(bs, TweenInfo.new(0.1), {Color=WHITE}):Play()
 		lc = UIS.InputBegan:Connect(function(inp)
 			if not li then return end
@@ -2956,7 +2987,7 @@ local function rowCycleSelector(tabName, label, options, defaultValue, onChange)
 	left.BackgroundColor3 = INPUT_BG
 	left.BackgroundTransparency = INPUT_TRANSPARENCY
 	left.BorderSizePixel = 0
-	left.Text = "â†"
+	left.Text = "←"
 	left.TextColor3 = WHITE
 	left.Font = Enum.Font.GothamBlack
 	left.TextSize = 15
@@ -2984,7 +3015,7 @@ local function rowCycleSelector(tabName, label, options, defaultValue, onChange)
 	right.BackgroundColor3 = INPUT_BG
 	right.BackgroundTransparency = INPUT_TRANSPARENCY
 	right.BorderSizePixel = 0
-	right.Text = "â†’"
+	right.Text = "→"
 	right.TextColor3 = WHITE
 	right.Font = Enum.Font.GothamBlack
 	right.TextSize = 15
@@ -3100,9 +3131,9 @@ do
 			if State.laggerToggled then
 				modeValLbl.Text = laggerPhase == 2 and "Lagger 2" or "Lagger 1"
 			elseif State.speedToggled then
-				modeValLbl.Text = State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve"
+				modeValLbl.Text = State.speedProfile == "Lagger" and ("Carry · " .. tostring(State.profileLaggerCarrySpeed)) or "Carry"
 			else
-				modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"
+				modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger · " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"
 			end
 		end
 		if State.requestConfigSave then State.requestConfigSave() end
@@ -3126,7 +3157,7 @@ normalBox = rowInput("speed y aimbot", "Normal Speed", nil, NS, function(v)
 		if State.requestConfigSave then State.requestConfigSave() end
 	end
 end)
-carryBox = rowInput("speed y aimbot", "Curve Speed", nil, CS, function(v)
+carryBox = rowInput("speed y aimbot", "Carry Speed", nil, CS, function(v)
 	if type(v) == "number" and v > 0 then
 		if State.speedProfile == "Lagger" then
 			State.profileLaggerCarrySpeed = v
@@ -3161,7 +3192,7 @@ do
 			if mobileLaggerSetActive then mobileLaggerSetActive(false) end
 		end
 		if mobileSpeedSetActive then mobileSpeedSetActive(State.speedToggled) end
-		modeValLbl.Text = State.laggerToggled and "Lagger" or (State.speedToggled and (State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve") or (State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"))
+		modeValLbl.Text = State.laggerToggled and "Lagger" or (State.speedToggled and (State.speedProfile == "Lagger" and ("Carry · " .. tostring(State.profileLaggerCarrySpeed)) or "Carry") or (State.speedProfile == "Lagger" and ("Lagger · " .. tostring(State.profileLaggerNormalSpeed)) or "Normal"))
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
 end
@@ -3177,7 +3208,7 @@ do
 		if mobileLaggerSetActive then mobileLaggerSetActive(phase == 1) end
 		if mobileLaggerCarrySetActive then mobileLaggerCarrySetActive(phase == 2) end
 		if modeValLbl then
-			modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Curve" or "Normal"))
+			modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Carry" or "Normal"))
 		end
 		if State.requestConfigSave then State.requestConfigSave() end
 	end
@@ -3247,7 +3278,7 @@ end
 
 do
 	local sv
-	sv, _ = rowToggleKB("speed y aimbot", "bat v2", "VersiÃ³n avanzada ", KB.AutoBatV2, false,
+	sv, _ = rowToggleKB("speed y aimbot", "bat v2", "Versión avanzada ", KB.AutoBatV2, false,
 	function(on)
 		State.autoBatV2Enabled = on
 		if on then
@@ -3283,7 +3314,7 @@ State._setTPBatEnabled = function(on)
 	end
 end
 
-State._tpBatConfigSetVisual = rowToggleKB("speed y aimbot", "Anti-Desync", "Teleport y golpe automÃ¡tico (anti-desync)", KB.TPBat, false,
+State._tpBatConfigSetVisual = rowToggleKB("speed y aimbot", "Anti-Desync", "Teleport y golpe automático (anti-desync)", KB.TPBat, false,
 function(on)
 	State._setTPBatEnabled(on)
 	if State._tpBatSetter then State._tpBatSetter(on) end
@@ -3297,7 +3328,7 @@ if not KB.InstaReset then KB.InstaReset = {kb=nil, gp=nil} end
 local cInsta = baseCard("mechanics y movement", 48)
 cInsta.LayoutOrder = lo("mechanics y movement")
 cLabel(cInsta, "Insta Reset", 10, 120, 11, LABEL_TEXT, Enum.Font.GothamBold)
-local slInsta = cLabel(cInsta, "Reset InstantÃ¡neo", 10, 150, 9, LABEL_SUB, Enum.Font.Gotham)
+local slInsta = cLabel(cInsta, "Reset Instantáneo", 10, 150, 9, LABEL_SUB, Enum.Font.Gotham)
 slInsta.Size = UDim2.new(0, 150, 0, 13); slInsta.Position = UDim2.new(0, 10, 0, 24)
 
 local plusBtn = Instance.new("TextButton", cInsta)
@@ -3337,7 +3368,7 @@ setInstaToggleVisual = makePillToggle(cInsta, false, function(on)
 			end)
 		end
 
-		task.spawn(safeInstaReset)
+		task.spawn(cursedInstaReset)
 
 		task.wait(0.2)
 		if setInstaToggleVisual then setInstaToggleVisual(false) end
@@ -3352,7 +3383,7 @@ setUnwalkToggle  = rowToggle("mechanics y movement", "Unwalk",         nil, fals
 setMedusaCounter = rowToggle("mechanics y movement", "Medusa Counter", nil, false, function(on) State.medusaCounterEnabled=on; if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end end)
 setBatCounter = rowToggle("mechanics y movement", "Bat Counter",    nil, false, function(on) State.batCounterEnabled=on; if on then startBatCounter() else stopBatCounter() end end)
 
-setAutoGrab = rowToggle("mechanics y movement", "Auto Grab", "Roba automÃ¡ticamente mÃ¡s rÃ¡pido", true, function(on)
+setAutoGrab = rowToggle("mechanics y movement", "Auto Grab", "Roba automáticamente más rápido", true, function(on)
 	Steal.AutoStealEnabled = on == true
 	if State._stealConfig then State._stealConfig.AUTO_STEAL_ENABLED = on == true end
 	if on then pcall(startAutoSteal) else pcall(stopAutoSteal) end
@@ -3367,11 +3398,11 @@ setAutoGrab = rowToggle("mechanics y movement", "Auto Grab", "Roba automÃ¡tica
 	end
 end)
 
-setAutoMedusaVisual = rowToggle("mechanics y movement", "Auto Medusa", "Uso automÃ¡tico y predictivo", false, function(on)
+setAutoMedusaVisual = rowToggle("mechanics y movement", "Auto Medusa", "Uso automático y predictivo", false, function(on)
 	MedusaConfig.Enabled = on
 end)
 
-rowInput("mechanics y movement", "Medusa Radius", "Rango de detecciÃ³n", MedusaConfig.Radius, function(v)
+rowInput("mechanics y movement", "Medusa Radius", "Rango de detección", MedusaConfig.Radius, function(v)
 	MedusaConfig.Radius = v
 	if MedusaConfig.RadiusPart then
 		MedusaConfig.RadiusPart.Size = Vector3.new(0.2, MedusaConfig.Radius*2, MedusaConfig.Radius*2)
@@ -3456,15 +3487,16 @@ makeSecHeader("performance y settings", "Performance")
 
 State._setHitboxFollower = rowToggle("performance y settings",
     "Hitbox Follower",
-    "Sigue con la mirada la hitbox mÃ¡s cercana",
+    "Sigue con la mirada la hitbox más cercana",
     false,
     function(on)
         State.hitboxFollowerEnabled = on == true
         if State.hitboxFollowerEnabled then
-            State._hitboxFollower.pausedByBatAim = false
-            if State.tpBatEnabled then
+            if State.autoBatToggled or State.tpBatEnabled then
+                State._hitboxFollower.pausedByBatAim = State.autoBatToggled == true
                 State._hitboxFollower.stop()
             else
+                State._hitboxFollower.pausedByBatAim = false
                 State._hitboxFollower.start()
             end
         else
@@ -3702,7 +3734,7 @@ uiScaleBox = rowInput("performance y settings", "UI Scale", nil, uiScaleValue, f
 	if State.requestConfigSave then State.requestConfigSave() else pcall(saveConfig) end
 end)
 
-buttonsSizeBox = rowInput("performance y settings", "Buttons Size", "0 = mÃ­nimo â€¢ 100 = mÃ¡ximo", State.buttonsSizeValue, function(v)
+buttonsSizeBox = rowInput("performance y settings", "Buttons Size", "0 = mínimo • 100 = máximo", State.buttonsSizeValue, function(v)
 	local n = math.clamp(math.floor(v + 0.5), 0, 100)
 	applyMobileButtonsSize(n)
 	if buttonsSizeBox then buttonsSizeBox.Text = tostring(n) end
@@ -3888,7 +3920,7 @@ do
 
 	local function downloadAudio(url, path)
 		if type(writefile) ~= "function" then
-			return false, "writefile no estÃ¡ disponible"
+			return false, "writefile no está disponible"
 		end
 
 		local data, lastError
@@ -3912,7 +3944,7 @@ do
 				if (code == 0 or (code >= 200 and code < 300)) and validAudio(body) then
 					data = body
 				else
-					lastError = "respuesta HTTP invÃ¡lida (" .. tostring(code) .. ")"
+					lastError = "respuesta HTTP inválida (" .. tostring(code) .. ")"
 				end
 			elseif not ok then
 				lastError = tostring(response)
@@ -3928,7 +3960,7 @@ do
 			elseif not ok then
 				lastError = tostring(result)
 			elseif not lastError then
-				lastError = "el enlace no devolviÃ³ un MP3 vÃ¡lido"
+				lastError = "el enlace no devolvió un MP3 válido"
 			end
 		end
 
@@ -3964,12 +3996,12 @@ do
 
 		local function createSound()
 			if type(assetFunction) ~= "function" then
-				return false, "getcustomasset/getsynasset no estÃ¡ disponible"
+				return false, "getcustomasset/getsynasset no está disponible"
 			end
 
 			local ok, assetId = pcall(assetFunction, config.file)
 			if not ok or type(assetId) ~= "string" or assetId == "" then
-				return false, "el archivo local todavÃ­a no estÃ¡ disponible"
+				return false, "el archivo local todavía no está disponible"
 			end
 
 			destroySound()
@@ -4154,9 +4186,9 @@ do
 	MobilePanel.Parent = gui
 
 	local Q_OFF      = Color3.fromRGB(0, 0, 0)
-	local Q_ON       = Color3.fromRGB(95, 0, 150)   -- morado cuando estÃ¡ activo / tocado
+	local Q_ON       = Color3.fromRGB(95, 0, 150)   -- morado cuando está activo / tocado
 	local Q_TEXT_OFF = Color3.fromRGB(180, 40, 255)
-	local Q_TEXT_ON  = Color3.fromRGB(255, 220, 255) -- texto mÃ¡s claro sobre el fondo morado
+	local Q_TEXT_ON  = Color3.fromRGB(255, 220, 255) -- texto más claro sobre el fondo morado
 
 	State._purpleAnimatedButtons = State._purpleAnimatedButtons or {}
 	State._purpleAnimationPeriod = 5.5
@@ -4284,7 +4316,7 @@ do
 		State._redShineLabels[button] = shineText
 		State._redShineGradients[button] = shineGradient
 
-		-- Actualiza Ãºnicamente cuando cambia una propiedad; no revisa cada frame.
+		-- Actualiza únicamente cuando cambia una propiedad; no revisa cada frame.
 		button:GetPropertyChangedSignal("Text"):Connect(function()
 			if shineText.Parent then shineText.Text = button.Text end
 		end)
@@ -4299,7 +4331,7 @@ do
 		end)
 	end
 
-	-- Un solo brillo activo a la vez. Evita mÃºltiples tweens infinitos simultÃ¡neos.
+	-- Un solo brillo activo a la vez. Evita múltiples tweens infinitos simultáneos.
 	if not State._redShineSequenceStarted then
 		State._redShineSequenceStarted = true
 		task.spawn(function()
@@ -4513,7 +4545,7 @@ do
 			task.delay(0.2, function() setInstaToggleVisual(false) end)
 		end
 
-		task.spawn(safeInstaReset)
+		task.spawn(cursedInstaReset)
 		if State.requestConfigSave then State.requestConfigSave() end
 	end)
 
@@ -4626,15 +4658,15 @@ do
 	end
 
 	do
-		local setter = select(2, createMobileButton("Speed", "CURVE\nSPD", 1, 2, true, function(on)
+		local setter = select(2, createMobileButton("Speed", "CARRY\nSPD", 1, 2, true, function(on)
 			State.speedToggled = on
 			if on then
 				State.laggerToggled = false
 				laggerPhase = 0
 				if mobileLaggerSetActive then mobileLaggerSetActive(false) end
-				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve" end
+				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Carry · " .. tostring(State.profileLaggerCarrySpeed)) or "Carry" end
 			else
-				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal" end
+				if modeValLbl then modeValLbl.Text = State.speedProfile == "Lagger" and ("Lagger · " .. tostring(State.profileLaggerNormalSpeed)) or "Normal" end
 			end
 		end))
 		mobileSpeedSetActive = function(on) setter(on) end
@@ -4669,7 +4701,7 @@ do
 			if s1 then s1(phase == 1) end
 			if s2 then s2(phase == 2) end
 			if modeValLbl then
-				modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Curve" or "Normal"))
+				modeValLbl.Text = phase == 1 and "Lagger 1" or (phase == 2 and "Lagger 2" or (State.speedToggled and "Carry" or "Normal"))
 			end
 			if State.requestConfigSave then State.requestConfigSave() end
 		end
@@ -4742,7 +4774,7 @@ local function CreateESP(player)
     if ESP[player] then return end
 
     local Line = Drawing.new("Line")
-    Line.Color = Color3.fromRGB(170, 0, 0) -- Se mantiene la lÃ­nea azul
+    Line.Color = Color3.fromRGB(170, 0, 0) -- Se mantiene la línea azul
     Line.Thickness = 0.1 -- Ultra delgada
     Line.Transparency = 0.7 -- Sutil transparencia
     Line.Visible = false
@@ -6221,8 +6253,8 @@ Steal.AutoStealEnabled = true
 startAutoSteal()
 statusLabel.Text = "READY"
 
-print("âœ… Auto Steal ACTIVADO - Robando automÃ¡ticamente!")
-print("ðŸ“Œ Presiona el botÃ³n en la barra para pausar/reanudar")
+print("✅ Auto Steal ACTIVADO - Robando automáticamente!")
+print("📌 Presiona el botón en la barra para pausar/reanudar")
 
 RunService.Stepped:Connect(function()
     for _,p in ipairs(Players:GetPlayers()) do
@@ -6403,11 +6435,11 @@ saveConfig = function(btn)
             State._configDirty = false
         else
             State._lastConfigJson = nil
-            State._lastSaveError = tostring((atomicOk and atomicErr) or atomicResult or "No se pudo escribir la configuraciÃ³n")
+            State._lastSaveError = tostring((atomicOk and atomicErr) or atomicResult or "No se pudo escribir la configuración")
             warn("[CRYON AUTO SAVE] " .. State._lastSaveError)
         end
     else
-        State._lastSaveError = "No se pudo convertir la configuraciÃ³n a JSON"
+        State._lastSaveError = "No se pudo convertir la configuración a JSON"
     end
 
     State._saveInProgress = false
@@ -6487,7 +6519,7 @@ loadConfig = function()
         State._configLoadFailed = hadAnyConfigFile
         State._allowInitialConfigCreation = not hadAnyConfigFile
         State._saveAfterLoad = false
-        State._lastSaveError = hadAnyConfigFile and "Se encontraron configuraciones daÃ±adas; no se sobrescribieron" or nil
+        State._lastSaveError = hadAnyConfigFile and "Se encontraron configuraciones dañadas; no se sobrescribieron" or nil
         if State.loadPositionBackup then pcall(State.loadPositionBackup) end
         return false
     end
@@ -6796,10 +6828,10 @@ loadConfig = function()
         if mobileLaggerSetActive then mobileLaggerSetActive(State.laggerToggled) end
         if modeValLbl then
             modeValLbl.Text =
-                laggerPhase == 2 and "Lagger Curve"
+                laggerPhase == 2 and "Lagger Carry"
                 or (State.laggerToggled and "Lagger")
-                or (State.speedToggled and (State.speedProfile == "Lagger" and ("Curve Â· " .. tostring(State.profileLaggerCarrySpeed)) or "Curve"))
-                or (State.speedProfile == "Lagger" and ("Lagger Â· " .. tostring(State.profileLaggerNormalSpeed)) or "Normal")
+                or (State.speedToggled and (State.speedProfile == "Lagger" and ("Carry · " .. tostring(State.profileLaggerCarrySpeed)) or "Carry"))
+                or (State.speedProfile == "Lagger" and ("Lagger · " .. tostring(State.profileLaggerNormalSpeed)) or "Normal")
         end
 
         State._setTPBatEnabled(cfg.tpBatEnabled == true)
@@ -6873,7 +6905,7 @@ loadConfig = function()
         State._lastSaveError = nil
         State._configDirty = false
     else
-        State._lastSaveError = "La configuraciÃ³n se leyÃ³, pero no se pudo aplicar; no serÃ¡ sobrescrita"
+        State._lastSaveError = "La configuración se leyó, pero no se pudo aplicar; no será sobrescrita"
     end
 
     local pendingSave = State._saveAfterLoad
@@ -6996,19 +7028,11 @@ local function setupChar(char)
     local head=char:FindFirstChild("Head")
     if head then
         local oldBB=head:FindFirstChild("FEARV2MobileBB"); if oldBB then oldBB:Destroy() end
-        local playerGui = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
-        if playerGui then
-            local oldGuiBB = playerGui:FindFirstChild("FEARV2MobileBB")
-            if oldGuiBB then oldGuiBB:Destroy() end
-        end
-        local bb=Instance.new("BillboardGui")
-        bb.Name="FEARV2MobileBB"; bb.Parent=playerGui or head
-        bb.Adornee=head; bb.Enabled=true; bb.MaxDistance=1000
-        bb.Size=UDim2.new(0,220,0,34); bb.StudsOffset=Vector3.new(0,3.2,0); bb.AlwaysOnTop=true
+        local bb=Instance.new("BillboardGui",head); bb.Name="FEARV2MobileBB"
+        bb.Size=UDim2.new(0,160,0,24); bb.StudsOffset=Vector3.new(0,3,0); bb.AlwaysOnTop=true
         speedLbl=Instance.new("TextLabel",bb); speedLbl.Name="SpeedBillLbl"
-        speedLbl.Visible=true
-        speedLbl.Size=UDim2.new(1,0,1,0); speedLbl.Position=UDim2.new(0,0,0,0); speedLbl.BackgroundTransparency=0.15
-        speedLbl.BackgroundColor3=Color3.fromRGB(20, 20, 20); speedLbl.Text="SPEED: 0.0"; speedLbl.TextColor3=Color3.fromRGB(255, 255, 255)
+        speedLbl.Size=UDim2.new(1,0,0,24); speedLbl.Position=UDim2.new(0,0,0,0); speedLbl.BackgroundTransparency=1
+        speedLbl.Text="0.0"; speedLbl.TextColor3=Color3.fromRGB(200, 0, 0)
         speedLbl.Font=Enum.Font.GothamBlack; speedLbl.TextScaled=true
         speedLbl.TextStrokeTransparency=0; speedLbl.TextStrokeColor3=Color3.fromRGB(0, 0, 0)
     end
@@ -7054,12 +7078,6 @@ RunService.RenderStepped:Connect(function()
 			and (laggerPhase == 2 and LS2 or LS)
 			or (State.speedToggled and getProfileCarrySpeed() or getProfileNormalSpeed())
 
-        -- Smooth carry/curve speed: gently oscillate between 26 and 30,
-        -- while Normal Speed remains at the selected base value (default 30).
-        if State.speedToggled and not State.laggerToggled then
-            spd = 28 + 2 * math.sin(os.clock() * 1.6)
-        end
-
         if type(spd) ~= "number" or spd < 0 then spd = 16 end
 
         -- Suavizado anti-kick: a 31 / 60 (y valores altos) no fuerza el velocity de golpe
@@ -7070,8 +7088,13 @@ RunService.RenderStepped:Connect(function()
                 h:Move(dir, false)
                 local cur = hrp.AssemblyLinearVelocity
                 local y = cur.Y
-                -- Mantener la velocidad horizontal objetivo exacta; conservar la velocidad vertical.
-                hrp.AssemblyLinearVelocity = Vector3.new(dir.X * targetSpd, y, dir.Z * targetSpd)
+                local desired = Vector3.new(dir.X * targetSpd, y, dir.Z * targetSpd)
+                -- Lerp más suave si el speed es alto (menos flags del anti-cheat)
+                local alpha = 0.55
+                if targetSpd >= 28 then alpha = 0.38 end
+                if targetSpd >= 50 then alpha = 0.28 end
+                if targetSpd >= 60 then alpha = 0.22 end
+                hrp.AssemblyLinearVelocity = cur:Lerp(desired, alpha)
             end)
         end
 
@@ -7094,15 +7117,13 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-end)
-
--- Auto-update the speed display at all times, even when no speed mode is toggled.
-RunService.RenderStepped:Connect(function()
-    if not (speedLbl and speedLbl.Parent and hrp and hrp.Parent) then return end
-    local vel = hrp.AssemblyLinearVelocity
-    local hspd = Vector3.new(vel.X, 0, vel.Z).Magnitude
-    speedLbl.Text = string.format("SPEED: %.1f", hspd)
-    speedLbl.Visible = true
+    pcall(function()
+        if speedLbl then
+            local vel = hrp.AssemblyLinearVelocity
+            local hspd = Vector3.new(vel.X, 0, vel.Z).Magnitude
+            speedLbl.Text = string.format("%.1f", hspd)
+        end
+    end)
 end)
 
 UIS.InputBegan:Connect(function(inp,gp)
@@ -7113,7 +7134,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         State.laggerToggled = false; laggerPhase = 0
         State.speedToggled = not State.speedToggled
         if mobileLaggerSetActive then mobileLaggerSetActive(false) end
-        if modeValLbl then modeValLbl.Text = State.speedToggled and "Curve" or "Normal" end
+        if modeValLbl then modeValLbl.Text = State.speedToggled and "Carry" or "Normal" end
     elseif kbMatch(KB.AutoLeft,kc) then
         State.autoLeftEnabled=not State.autoLeftEnabled
         if State.autoLeftEnabled and State.autoBatToggled then State.autoBatToggled=false; stopBatAimbot(); if autoBatSetVisual then autoBatSetVisual(false) end end
@@ -7162,7 +7183,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         State._setTPBatEnabled(not State.tpBatEnabled)
         if State._tpBatSetVisual then State._tpBatSetVisual(State.tpBatEnabled) end
     elseif kbMatch(KB.InstaReset,kc) then
-        task.spawn(safeInstaReset)
+        task.spawn(cursedInstaReset)
         if btnInstaReset and btnInstaReset.Parent then
             btnInstaReset:SetAttribute("PurpleFlash", true)
             task.delay(0.55, function() if btnInstaReset and btnInstaReset.Parent then btnInstaReset:SetAttribute("PurpleFlash", false) end end)
