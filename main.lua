@@ -944,6 +944,7 @@ local laggerPhase = 0 -- 0=off, 1=lagger, 2=lagger carry
 
 local State = {
 	speedToggled = false, laggerToggled = false, autoBatToggled = false,
+	batAimbotV3Enabled = false, spinBotEnabled = false, spinBotSpeed = 35,
 	speedProfile = "Normal",
 	profileLaggerNormalSpeed = 40,
 	profileLaggerCarrySpeed = 20,
@@ -1028,11 +1029,15 @@ local Steal = {
 
 local Conns = {
 	autoSteal = nil, antiRag = nil,
+	aimbotV3 = nil, spinBot = nil,
 	anchor = {}, progress = nil,
 }
 
 local safetyPositionIsValid
 local startBatAimbot, stopBatAimbot
+local startBatAimbotV3, stopBatAimbotV3
+local startSpinBot, stopSpinBot
+local spinBotSpeedBox, spinBotSetVisual, batAimbotV3SetVisual
 State.findAnyToolMob = function()
 	local c=LP.Character
 	if c then for _,v in ipairs(c:GetChildren()) do if v:IsA("Tool") then return v end end end
@@ -1072,6 +1077,29 @@ State.tryHitBatMob = function()
 	task.delay(MOB_SWING_COOLDOWN,function() State.hittingCooldown=false end)
 end
 local _aimbotTarget = nil
+
+startSpinBot = function()
+    if Conns.spinBot then Conns.spinBot:Disconnect(); Conns.spinBot = nil end
+    Conns.spinBot = RunService.Heartbeat:Connect(function()
+        if not State.spinBotEnabled then return end
+        local char = LP.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then return end
+        -- Use the speed entered in the menu; no arbitrary UI maximum is imposed.
+        local speed = tonumber(State.spinBotSpeed) or 35
+        if speed ~= speed or speed == math.huge or speed == -math.huge then speed = 35 end
+        root.AssemblyAngularVelocity = Vector3.new(0, speed, 0)
+    end)
+end
+
+stopSpinBot = function()
+    State.spinBotEnabled = false
+    if Conns.spinBot then Conns.spinBot:Disconnect(); Conns.spinBot = nil end
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then root.AssemblyAngularVelocity = Vector3.zero end
+end
 
 State.findBat = function()
 	local char = LP.Character; if not char then return nil end
@@ -1125,6 +1153,7 @@ stopBatAimbot = function()
 end
 
 startBatAimbot = function()
+	if State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
 	if Conns.aimbot then Conns.aimbot:Disconnect() end
 	_autoBatEquippedThisRun = false
 
@@ -1200,6 +1229,83 @@ startBatAimbot = function()
 			end
 		end
 	end)
+end
+
+-- FR HUB-inspired normal predictive chase, exposed separately as Bat Aimbot V3.
+startBatAimbotV3 = function()
+    if State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
+    if Conns.aimbotV3 then Conns.aimbotV3:Disconnect(); Conns.aimbotV3 = nil end
+    State.batAimbotV3Enabled = true
+    local swingCooldown = false
+    Conns.aimbotV3 = RunService.RenderStepped:Connect(function()
+        if not State.batAimbotV3Enabled then return end
+        local char = LP.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then return end
+
+        if not char:FindFirstChildOfClass("Tool") then
+            local bat = State.findBat()
+            if bat then pcall(function() hum:EquipTool(bat) end) end
+        end
+
+        local target = State.getClosestTarget()
+        if not target or not target.Parent then
+            hum.AutoRotate = true
+            root.AssemblyAngularVelocity = Vector3.zero
+            return
+        end
+        hum.AutoRotate = false
+        local targetVel = target.AssemblyLinearVelocity
+        local targetPos = target.Position
+        local predictPos = targetPos + targetVel * 0.14 + target.CFrame.LookVector * 0.3
+        local direction = predictPos - root.Position
+        local flat = Vector3.new(direction.X, 0, direction.Z)
+        if flat.Magnitude > 0.01 then
+            flat = flat.Unit
+            local desiredY = (targetPos.Y + 3.7 - root.Position.Y) * 19.5 + targetVel.Y * 0.8
+            if hum.FloorMaterial ~= Enum.Material.Air then desiredY = math.max(desiredY, 13) end
+            desiredY = math.clamp(desiredY, -70, 110)
+            local desiredVelocity = Vector3.new(flat.X * 60, desiredY, flat.Z * 60)
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVelocity, 0.8)
+        end
+
+        local predicted = targetPos + targetVel * math.clamp(targetVel.Magnitude / 150, 0.05, 0.2)
+        if (predicted - root.Position).Magnitude > 0.1 then
+            local goal = CFrame.lookAt(root.Position, predicted)
+            local rx, ry, rz = (root.CFrame:Inverse() * goal):ToEulerAnglesXYZ()
+            root.AssemblyAngularVelocity = root.CFrame:VectorToWorldSpace(Vector3.new(
+                math.clamp(rx, -2.5, 2.5) * 42,
+                math.clamp(ry, -2.5, 2.5) * 42,
+                math.clamp(rz, -2.5, 2.5) * 42
+            ))
+        end
+
+        local bat = char:FindFirstChildOfClass("Tool") or State.findBat()
+        if State.autoSwingEnabled and bat and (target.Position - root.Position).Magnitude <= 7 and not swingCooldown then
+            swingCooldown = true
+            pcall(function()
+                if bat.Parent ~= char then hum:EquipTool(bat) end
+                bat:Activate()
+                local remote = bat:FindFirstChildWhichIsA("RemoteEvent")
+                if remote then remote:FireServer() end
+            end)
+            task.delay(0.08, function() swingCooldown = false end)
+        end
+    end)
+end
+
+stopBatAimbotV3 = function()
+    State.batAimbotV3Enabled = false
+    if Conns.aimbotV3 then Conns.aimbotV3:Disconnect(); Conns.aimbotV3 = nil end
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if root then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
+    if hum then hum.AutoRotate = true end
 end
 
 State._hitboxFollower = State._hitboxFollower or {
@@ -1529,7 +1635,7 @@ function applyMobileButtonsShape(shape)
 	for _, mobileBtn in pairs(mobileButtonsByName) do
 		applyShapeToMobileButton(mobileBtn)
 	end
-	for _, specialBtn in ipairs({btnBatV2, btnInstaReset}) do
+	for _, specialBtn in ipairs({btnInstaReset}) do
 		applyShapeToMobileButton(specialBtn)
 	end
 	return State.buttonsShape
@@ -3590,12 +3696,14 @@ do
 	end
 end
 
-State.makeSecHeader("speed y aimbot", "Bat Combat V1 & V2")
+State.makeSecHeader("speed y aimbot", "Bat Combat V1 & V3")
 do
 	local sv
 	sv, _ = State.rowToggleKB("speed y aimbot", "Auto Bat V1", "Modo predictivo", KB.AutoBat, false,
 	function(on)
 		State.autoBatToggled = on
+		if on and State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
+		if on and State.batAimbotV3Enabled then State.batAimbotV3Enabled = false; if batAimbotV3SetVisual then batAimbotV3SetVisual(false) end; stopBatAimbotV3() end
 		if on then
 			if State.autoLeftEnabled then State.autoLeftEnabled = false; if autoLeftSetVisual then autoLeftSetVisual(false) end; State.stopAutoLeft() end
 			if State.autoRightEnabled then State.autoRightEnabled = false; if autoRightSetVisual then autoRightSetVisual(false) end; State.stopAutoRight() end
@@ -3617,27 +3725,22 @@ do
 end
 
 do
-	local sv
-	sv, _ = State.rowToggleKB("speed y aimbot", "bat v2", "Versión avanzada ", KB.AutoBatV2, false,
-	function(on)
-		State.autoBatV2Enabled = on
-		if on then
-			if State.autoLeftEnabled then State.autoLeftEnabled = false; if autoLeftSetVisual then autoLeftSetVisual(false) end; State.stopAutoLeft() end
-			if State.autoRightEnabled then State.autoRightEnabled = false; if autoRightSetVisual then autoRightSetVisual(false) end; State.stopAutoRight() end
-			if State.autoBatToggled then
-				State.autoBatToggled = false
-				if autoBatSetVisual then autoBatSetVisual(false) end
-				stopBatAimbot()
-			end
-			if startBatAimbotV2 then startBatAimbotV2() end
-		else
-			if stopBatAimbotV2 then stopBatAimbotV2() end
-		end
-		if mobileBatV2SetActive then mobileBatV2SetActive(on) end
-	end,
-	function() end)
-	autoBatV2SetVisual = sv
-	setAutoBatV2 = sv
+    local sv
+    sv = State.rowToggle("speed y aimbot", "Bat Aimbot V3", "FR HUB-style predictive aim · speed 60", false, function(on)
+        State.batAimbotV3Enabled = on
+        if on and State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
+        if on then
+            if State.autoBatToggled then State.autoBatToggled = false; if autoBatSetVisual then autoBatSetVisual(false) end; stopBatAimbot() end
+            if State.autoBatV2Enabled then State.autoBatV2Enabled = false; if autoBatV2SetVisual then autoBatV2SetVisual(false) end; if stopBatAimbotV2 then stopBatAimbotV2() end end
+            if State.autoLeftEnabled then State.autoLeftEnabled = false; if autoLeftSetVisual then autoLeftSetVisual(false) end; State.stopAutoLeft() end
+            if State.autoRightEnabled then State.autoRightEnabled = false; if autoRightSetVisual then autoRightSetVisual(false) end; State.stopAutoRight() end
+            startBatAimbotV3()
+        else
+            stopBatAimbotV3()
+        end
+        if State.requestConfigSave then State.requestConfigSave() end
+    end)
+    batAimbotV3SetVisual = sv
 end
 
 State._setTPBatEnabled = function(on)
@@ -3662,6 +3765,28 @@ end,
 function() end)
 
 State.makeSecHeader("mechanics y movement", "Game Mechanics")
+
+local spinToggleVisual = State.rowToggle("mechanics y movement", "Spin Bot", "Enable / Disable continuous spin", false, function(on)
+    State.spinBotEnabled = on
+    if on then
+        if State.autoBatToggled then State.autoBatToggled = false; if autoBatSetVisual then autoBatSetVisual(false) end; stopBatAimbot() end
+        if State.autoBatV2Enabled then State.autoBatV2Enabled = false; if autoBatV2SetVisual then autoBatV2SetVisual(false) end; if stopBatAimbotV2 then stopBatAimbotV2() end end
+        if State.batAimbotV3Enabled then State.batAimbotV3Enabled = false; if batAimbotV3SetVisual then batAimbotV3SetVisual(false) end; stopBatAimbotV3() end
+        startSpinBot()
+    else
+        stopSpinBot()
+    end
+    if State.requestConfigSave then State.requestConfigSave() end
+end)
+spinBotSetVisual = spinToggleVisual
+spinBotSpeedBox = State.rowInput("mechanics y movement", "Spin Bot Speed", "Rotation speed (any positive number)", 35, function(value)
+    if type(value) == "number" and value ~= 0 and value == value and value < math.huge and value > -math.huge then
+        State.spinBotSpeed = value
+        if State.requestConfigSave then State.requestConfigSave() end
+    elseif spinBotSpeedBox then
+        spinBotSpeedBox.Text = tostring(State.spinBotSpeed)
+    end
+end)
 
 if not KB.InstaReset then KB.InstaReset = {kb=nil, gp=nil} end
 
@@ -4246,7 +4371,6 @@ setHideButtonsVisual = State.rowToggle("performance y settings", "Hide Buttons",
 		end
 	end
 
-	if btnBatV2 then btnBatV2.Visible = visible end
 	if btnInstaReset then btnInstaReset.Visible = visible end
 	if pbFrame then pbFrame.Visible = visible end
 
@@ -4958,72 +5082,6 @@ do
 
 	createMobileButton("Drop", "DROP\nBR", 0, 0, false, function() task.spawn(State.runDrop) end)
 
-	btnBatV2 = Instance.new("TextButton")
-	btnBatV2.Name = "Btn_BatnV2"
-	btnBatV2.Size = UDim2.new(0, BTN_SIZE, 0, BTN_SIZE)
-	btnBatV2.Position = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING)
-	btnBatV2.BackgroundColor3 = Q_OFF
-	btnBatV2.Text = "BAT V2"
-	btnBatV2.TextColor3 = Q_TEXT_OFF
-	btnBatV2.TextScaled = false; btnBatV2.TextSize = 11
-	btnBatV2.Font = Enum.Font.GothamBold
-	btnBatV2.TextWrapped = true; btnBatV2.LineHeight = 1.2
-	btnBatV2.BorderSizePixel = 0; btnAutoButtonColor = false
-	btnBatV2.ZIndex = 100
-	btnBatV2.Parent = gui
-	State._registerPurpleAnimatedButton(btnBatV2)
-	attachRedTextShine(btnBatV2)
-	Instance.new("UICorner", btnBatV2).Name = "ButtonShapeCorner"
-	local batV2Stroke = Instance.new("UIStroke")
-	batV2Stroke.Name = "RedOuterStroke"
-	batV2Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	batV2Stroke.Color = Color3.fromRGB(0, 0, 0)
-	batV2Stroke.Thickness = 1.1
-	batV2Stroke.Transparency = 0.15
-	batV2Stroke.LineJoinMode = Enum.LineJoinMode.Round
-	batV2Stroke.Parent = btnBatV2
-	applyMobileButtonsSize(State.buttonsSizeValue)
-
-	State.makeDraggable(btnBatV2)
-	btnBatV2.InputEnded:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			if State.requestConfigSave then State.requestConfigSave() end
-		end
-	end)
-
-	State._batV2On = false
-	State._setBatV2Visual = function(s)
-		State._batV2On = s
-		btnBatV2:SetAttribute("PurpleActive", s == true)
-		if autoBatV2SetVisual then autoBatV2SetVisual(s) end
-	end
-
-	btnBatV2.Activated:Connect(function()
-		State._batV2On = not State._batV2On
-		State._setBatV2Visual(State._batV2On)
-		State.autoBatV2Enabled = State._batV2On
-		if State._batV2On then
-			if State.autoLeftEnabled then State.autoLeftEnabled = false; if autoLeftSetVisual then autoLeftSetVisual(false) end; State.stopAutoLeft() end
-			if State.autoRightEnabled then State.autoRightEnabled = false; if autoRightSetVisual then autoRightSetVisual(false) end; State.stopAutoRight() end
-			if State.autoBatToggled then
-				State.autoBatToggled = false
-				if autoBatSetVisual then autoBatSetVisual(false) end
-				stopBatAimbot()
-			end
-			if startBatAimbotV2 then startBatAimbotV2() end
-		else
-			if stopBatAimbotV2 then stopBatAimbotV2() end
-		end
-		if State.requestConfigSave then State.requestConfigSave() end
-	end)
-
-	local oldAutoBatV2SetVisual = autoBatV2SetVisual
-	autoBatV2SetVisual = function(on)
-		State._batV2On = on
-		btnBatV2:SetAttribute("PurpleActive", on == true)
-		if oldAutoBatV2SetVisual then oldAutoBatV2SetVisual(on) end
-	end
-	mobileBatV2SetActive = function(on) autoBatV2SetVisual(on) end
 
 	btnInstaReset = Instance.new("TextButton")
 	btnInstaReset.Name = "Btn_InstaReset"
@@ -5080,7 +5138,6 @@ do
 			local defaultPos = mobileButtonDefaultPositions[name]
 			if btn and defaultPos then btn.Position = defaultPos end
 		end
-		btnBatV2.Position = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING)
 		btnInstaReset.Position = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING + BTN_SIZE + BTN_GAP)
 		if State.requestPositionSave then State.requestPositionSave() end
 		if State.requestConfigSave then State.requestConfigSave() end
@@ -5172,6 +5229,34 @@ do
 	end
 
 	createMobileButton("TPDown", "TP\nDOWN", 0, 2, false, function() task.spawn(State.runTPDown) end)
+
+	-- BAT V3 is a regular in-game button. Keep it in the visible upper-right button group.
+	do
+		local batV3Button, setter = createMobileButton("BatV3", "BAT V3", 1, 2, true, function(on)
+			State.batAimbotV3Enabled = on
+			if on then
+				if State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
+				if State.autoBatToggled then State.autoBatToggled = false; if autoBatSetVisual then autoBatSetVisual(false) end; stopBatAimbot() end
+				if State.autoBatV2Enabled then State.autoBatV2Enabled = false; if autoBatV2SetVisual then autoBatV2SetVisual(false) end; if stopBatAimbotV2 then stopBatAimbotV2() end end
+				if State.autoLeftEnabled then State.autoLeftEnabled = false; if autoLeftSetVisual then autoLeftSetVisual(false) end; State.stopAutoLeft() end
+				if State.autoRightEnabled then State.autoRightEnabled = false; if autoRightSetVisual then autoRightSetVisual(false) end; State.stopAutoRight() end
+				if startBatAimbotV3 then startBatAimbotV3() end
+			else
+				if stopBatAimbotV3 then stopBatAimbotV3() end
+			end
+			if State.requestConfigSave then State.requestConfigSave() end
+		end)
+		-- Replace the old BAT V2 screen button in its original, visible position.
+		local batV3VisiblePos = UDim2.new(1, -140 - BTN_SIZE - BTN_GAP, 0, 10 + PADDING)
+		batV3Button.Position = batV3VisiblePos
+		mobileButtonDefaultPositions.BatV3 = batV3VisiblePos
+		local previous = batAimbotV3SetVisual
+		batAimbotV3SetVisual = function(on)
+			setter(on)
+			if previous then previous(on) end
+		end
+		if mobileBtnActive then mobileBtnActive.BatV3 = setter end
+	end
 
 	State._tpBatButton, State._tpBatSetter = createMobileButton("TPBat", "ANTI\nDESYNC", 0, 4, true, function(on)
 		State._setTPBatEnabled(on)
@@ -5406,12 +5491,30 @@ end
 State._restoreSavedPosition = function(guiObject, data)
     if not guiObject or type(data) ~= "table" or data.xs == nil then return end
     pcall(function()
-        guiObject.Position = UDim2.new(
-            tonumber(data.xs) or 0,
-            tonumber(data.xo) or 0,
-            tonumber(data.ys) or 0,
-            tonumber(data.yo) or 0
-        )
+        local xs, xo = tonumber(data.xs) or 0, tonumber(data.xo) or 0
+        local ys, yo = tonumber(data.ys) or 0, tonumber(data.yo) or 0
+        if guiObject.Name == "Btn_BatV3" then
+            local targetX = -140 - BTN_SIZE - BTN_GAP
+            local targetY = 10 + PADDING
+            local oldY = 10 + PADDING + 2 * (BTN_SIZE + BTN_GAP)
+            local camera = workspace.CurrentCamera
+            local viewport = camera and camera.ViewportSize
+            -- Migrate the old default position, which overlapped another mobile button.
+            if math.abs(xs - 1) < 0.001 and math.abs(xo - targetX) < 2 and math.abs(ys) < 0.001 and math.abs(yo - oldY) < 2 then
+                guiObject.Position = UDim2.new(1, targetX, 0, targetY)
+                return
+            end
+            if viewport then
+                local px = xs * viewport.X + xo
+                local py = ys * viewport.Y + yo
+                local size = guiObject.AbsoluteSize
+                if px < 0 or px > viewport.X - math.max(size.X, 60) or py < 0 or py > viewport.Y - math.max(size.Y, 60) then
+                    guiObject.Position = UDim2.new(1, targetX, 0, targetY)
+                    return
+                end
+            end
+        end
+        guiObject.Position = UDim2.new(xs, xo, ys, yo)
     end)
 end
 
@@ -5427,7 +5530,6 @@ State.savePositionBackup = function()
         miniPos = State._positionSnapshot(mini),
         panelPos = State._positionSnapshot(MobilePanel),
         pbPos = State._positionSnapshot(pbFrame),
-        batV2Pos = State._positionSnapshot(btnBatV2),
         instaResetPos = State._positionSnapshot(btnInstaReset),
         autoStealBarPos = State._positionSnapshot(State.autoStealBarFrame),
         mobileButtonPositions = buttonPositions,
@@ -5479,7 +5581,6 @@ State.loadPositionBackup = function()
         State._restoreSavedPosition(mini, data.miniPos)
         State._restoreSavedPosition(MobilePanel, data.panelPos)
         State._restoreSavedPosition(pbFrame, data.pbPos)
-        State._restoreSavedPosition(btnBatV2, data.batV2Pos)
         State._restoreSavedPosition(btnInstaReset, data.instaResetPos)
         State._restoreSavedPosition(State.autoStealBarFrame, data.autoStealBarPos)
         if type(data.mobileButtonPositions) == "table" then
@@ -5632,6 +5733,7 @@ State.tryHitBypassBat = function()
 end
 
 startBatAimbotV2 = function()
+    if State.spinBotEnabled then State.spinBotEnabled = false; if spinBotSetVisual then spinBotSetVisual(false) end; stopSpinBot() end
     if Conns.aimbotV2 then return end
     State.autoBatV2Enabled = true
 
@@ -6885,6 +6987,9 @@ saveConfig = function(btn)
         autoSwing = State.autoSwingEnabled,
         autoBatToggled = State.autoBatToggled,
         autoBatV2Toggled = State.autoBatV2Enabled,
+        batAimbotV3Enabled = State.batAimbotV3Enabled,
+        spinBotEnabled = State.spinBotEnabled,
+        spinBotSpeed = State.spinBotSpeed,
         tpBatEnabled = State.tpBatEnabled,
         stretchRez = State.stretchRezEnabled,
         removeAccessories = State.removeAccessoriesEnabled,
@@ -6922,7 +7027,6 @@ saveConfig = function(btn)
         mainPos = positionSnapshot(main),
         miniPos = positionSnapshot(mini),
         pbPos = positionSnapshot(pbFrame),
-        batV2Pos = positionSnapshot(btnBatV2),
         instaResetPos = positionSnapshot(btnInstaReset),
         autoStealBarPos = positionSnapshot(frame),
     }
@@ -7076,6 +7180,10 @@ loadConfig = function()
         if type(cfg.laggerCarrySpeed) == "number" then
             LS2 = cfg.laggerCarrySpeed
             if laggerBox2 then laggerBox2.Text = tostring(LS2) end
+        end
+        if type(cfg.spinBotSpeed) == "number" and cfg.spinBotSpeed ~= 0 and cfg.spinBotSpeed == cfg.spinBotSpeed and cfg.spinBotSpeed < math.huge and cfg.spinBotSpeed > -math.huge then
+            State.spinBotSpeed = cfg.spinBotSpeed
+            if spinBotSpeedBox then spinBotSpeedBox.Text = tostring(State.spinBotSpeed) end
         end
 
         if type(cfg.uiScale) == "number" then
@@ -7321,7 +7429,6 @@ loadConfig = function()
             for _, mobileBtn in pairs(mobileButtonsByName) do
                 if mobileBtn then mobileBtn.Visible = visible end
             end
-            if btnBatV2 then btnBatV2.Visible = visible end
             if btnInstaReset then
                 btnInstaReset.Visible = visible and (cfg.instaResetVisible ~= false)
             end
@@ -7366,30 +7473,36 @@ loadConfig = function()
 
         local autoBatV1 = cfg.autoBatToggled == true
         local autoBatV2 = cfg.autoBatV2Toggled == true
-        if autoBatV1 then autoBatV2 = false end
+        local autoBatV3 = cfg.batAimbotV3Enabled == true
+        if autoBatV3 then autoBatV1 = false; autoBatV2 = false elseif autoBatV1 then autoBatV2 = false end
 
         State.autoBatToggled = autoBatV1
         State.autoBatV2Enabled = autoBatV2
+        State.batAimbotV3Enabled = autoBatV3
+        State.spinBotEnabled = cfg.spinBotEnabled == true and not (autoBatV1 or autoBatV2 or autoBatV3)
 
         if autoBatSetVisual then autoBatSetVisual(State.autoBatToggled) end
         if autoBatV2SetVisual then autoBatV2SetVisual(State.autoBatV2Enabled) end
+        if batAimbotV3SetVisual then batAimbotV3SetVisual(State.batAimbotV3Enabled) end
+        if spinBotSetVisual then spinBotSetVisual(State.spinBotEnabled) end
         if State.autoBatToggled then
             task.defer(startBatAimbot)
         elseif State.autoBatV2Enabled then
             task.defer(startBatAimbotV2)
+        elseif State.batAimbotV3Enabled then
+            task.defer(startBatAimbotV3)
         else
             pcall(stopBatAimbot)
             if stopBatAimbotV2 then pcall(stopBatAimbotV2) end
+            pcall(stopBatAimbotV3)
         end
+        if State.spinBotEnabled then task.defer(startSpinBot) else pcall(stopSpinBot) end
 
         local function restorePosition(guiObject, data)
-            if guiObject and type(data) == "table" and data.xs ~= nil then
-                guiObject.Position = UDim2.new(
-                    data.xs,
-                    data.xo or 0,
-                    data.ys or 0,
-                    data.yo or 0
-                )
+            if State._restoreSavedPosition then
+                State._restoreSavedPosition(guiObject, data)
+            elseif guiObject and type(data) == "table" and data.xs ~= nil then
+                guiObject.Position = UDim2.new(data.xs, data.xo or 0, data.ys or 0, data.yo or 0)
             end
         end
 
@@ -7405,7 +7518,6 @@ loadConfig = function()
             end
 
             restorePosition(pbFrame, cfg.pbPos)
-            restorePosition(btnBatV2, cfg.batV2Pos)
             restorePosition(btnInstaReset, cfg.instaResetPos)
             restorePosition(frame, cfg.autoStealBarPos)
         end
@@ -7688,6 +7800,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         if State._setLaggerPhase then State._setLaggerPhase(laggerPhase == 2 and 0 or 2) end
     elseif State.kbMatch(KB.AutoBat,kc) then
         State.autoBatToggled=not State.autoBatToggled
+        if State.autoBatToggled and State.batAimbotV3Enabled then State.batAimbotV3Enabled=false; if batAimbotV3SetVisual then batAimbotV3SetVisual(false) end; stopBatAimbotV3() end
         if State.autoBatToggled then
             if State.autoLeftEnabled then State.autoLeftEnabled=false; State.stopAutoLeft(); if autoLeftSetVisual then autoLeftSetVisual(false) end end
             if State.autoRightEnabled then State.autoRightEnabled=false; State.stopAutoRight(); if autoRightSetVisual then autoRightSetVisual(false) end end
@@ -7696,6 +7809,7 @@ UIS.InputBegan:Connect(function(inp,gp)
         if autoBatSetVisual then autoBatSetVisual(State.autoBatToggled) end
     elseif State.kbMatch(KB.AutoBatV2,kc) then
         State.autoBatV2Enabled = not State.autoBatV2Enabled
+        if State.autoBatV2Enabled and State.batAimbotV3Enabled then State.batAimbotV3Enabled=false; if batAimbotV3SetVisual then batAimbotV3SetVisual(false) end; stopBatAimbotV3() end
         if State.autoBatV2Enabled then
             if State.autoLeftEnabled then State.autoLeftEnabled=false; State.stopAutoLeft(); if autoLeftSetVisual then autoLeftSetVisual(false) end end
             if State.autoRightEnabled then State.autoRightEnabled=false; State.stopAutoRight(); if autoRightSetVisual then autoRightSetVisual(false) end end
@@ -7768,6 +7882,7 @@ pcall(function()
         end
     end)
 end)
+
 
 print("[MOYA DUELS V2] Loaded!")
 
